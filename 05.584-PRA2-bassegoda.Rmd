@@ -1,0 +1,244 @@
+---
+title: 'Mineria de dades: PRA2 - Projecte de mineria de dades'
+author: "Autor: Octavi Bassegoda"
+date: "Juny 2026"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+    includes:
+      in_header: 05.584-PAC-header.html
+  word_document: default
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+******
+
+# Documentació de la interacció amb IA generativa
+
+******
+
+Tal com s’ha fet en les tres PEC i en la PRA1, en aquesta activitat es permet l’ús d’eines d’IA generativa. Es demana realitzar **com a mínim 3 consultes**.
+
+De la mateixa manera que en la PRA1, és fonamental documentar de manera clara i
+estructurada la interacció amb eines d’intel·ligència artificial
+generativa (com ChatGPT o d’altres). No es tracta només d’obtenir
+respostes, sinó d’entendre com aquestes eines poden ajudar-nos a
+resoldre problemes, prendre decisions i reflexionar críticament sobre
+els resultats que ofereixen. Per això, proposem una guia que agrupi les
+preguntes que es plantegen a la IA en cinc categories principals.
+Aquesta classificació no només facilita l’anàlisi posterior, sinó que
+també ajuda a identificar patrons en el tipus de suport que cerquem.
+
+## Categories de preguntes
+
+-   **Metodologia**: Preguntes relacionades amb bones pràctiques,
+    aproximacions recomanades i marcs metodològics.
+
+-   **Programació**: Consultes sobre implementació de codi, tant en R
+    com en Python.
+
+-   **Diagnosi**: Preguntes orientades a identificar i resoldre errors o
+    comportaments inesperats.
+
+-   **Interpretació**: Dubtes sobre com entendre els resultats
+    obtinguts, el seu significat i possibles implicacions.
+
+-   **Extensió**: Preguntes obertes que busquen que la IA proposi noves
+    línies de treball, idees o millores.
+
+## Esquema de documentació
+
+Per a cada categoria, es documentarà la interacció amb la IA seguint
+aquest esquema:
+
+1.  **Pregunta traslladada a la IA generativa** Què s’ha preguntat
+    exactament?
+
+2.  **Resposta obtinguda** Quin tipus de resposta s’ha rebut? (pot
+    incloure scripts, enllaços, gràfics, explicacions, etc.)
+
+3.  **Decisió** Què s’ha fet amb aquesta resposta? S’ha aplicat
+    directament, s’ha modificat, s’ha descartat?
+
+4.  **Reflexió crítica** Quins problemes s’han detectat? Quines millores
+    s’han realitzat? Quins aprenentatges se n’han extret?
+
+Aquesta estructura no només ens permet aprofitar el potencial de la IA
+generativa com a eina de *suport tècnic i metodològic*, sinó que també
+ens obliga a mantenir una actitud crítica i reflexiva sobre el seu ús.
+Documentar cada interacció amb aquest nivell de detall ens ajuda a
+entendre millor com prenem decisions, quin tipus d’ajuda cerquem i com
+podem millorar els nostres processos. A més, ens permet *justificar de
+manera transparent* l’ús d’aquestes eines en el context de l’activitat,
+alineant-se amb bones pràctiques de treball col·laboratiu i responsable.
+
+
+******
+# Enunciat
+******
+
+Com a continuació de l'estudi iniciat a la Pràctica 1, procedim a **aplicar models analítics, tant no supervisats com supervisats**, sobre el joc de dades seleccionat i preparat. En aquesta **Pràctica 2 haureu de carregar les dades prèviament preparades a la Pràctica 1**. 
+
+L'objectiu és que poseu en pràctica amb les vostres pròpies dades tots els models no supervisats i supervisats que s'han utilitzat a les 3 PACs prèvies. A més, es proposa que s'utilitzin mètriques i algorismes alternatius als proposats a les PACs ja realitzades.
+
+**Punt comú per a tots els exercicis**
+
+En tots els apartats dels exercicis d'aquesta pràctica es demana a l'estudiant, a més d'aplicar els diferents mètodes, analitzar correctament el problema, **detallar-ho de manera exhaustiva**, ressaltant el perquè i com s'ha realitzat, incloure elements visuals, explicar els resultats i fer les comparatives oportunes amb les seves conclusions.
+
+Per a tota la pràctica és **necessari documentar** cada apartat de l'exercici pràctic que s'ha fet, el perquè s'ha fet i com s'ha fet. Així mateix, totes les decisions i conclusions hauran de ser presentades de forma raonada i clara, **contextualitzant els resultats**, és a dir, especificant tots i cadascun dels passos que s'hagin dut a terme per resoldre'ls.
+
+
+D'aquesta manera es demana a l'estudiant que completi els passos següents amb el joc de dades preparat a la Practica 1:
+
+**Models no supervisats**
+
+1. Aplicar l'algorisme **no supervisat** *k-means* basat en el concepte de distància entre les mitjanes dels grups, sobre el joc de dades originals i les dades normalitzades. Es recorda que cal utilitzar les variables quantitatives o binàries que formin part de la base de dades. També, en aquest apartat cal decidir si els grups es defineixen a partir de les variables normalitzades o no i cal seleccionar el nombre de clústers que millor s'ajusti a les dades.
+
+2. Utilitzant el nombre de clústers i les dades (normalitzades o no) seleccionades al punt 1, utilitzar l'algorisme *k-medians* (basat en les medianes com a centres dels clústers) per definir cadascun dels grups. Compareu els resultats obtinguts amb ambdós algorismes, *k-means* i *k-medians*, i comenteu quin mètode us sembla el més adequat per a les vostres dades. Tingueu en compte que l'algorisme basat en la mediana no és el mateix que l’*around medoids*, que s’implementa amb la funció `pam()` del paquet "cluster" de R. Per tant, addicionalment també podeu comparar els resultats amb els obtinguts amb el mètode *around medoids*.
+
+3. Entrenar de nou el model basat en *k-means* que heu seleccionat al punt 1 però usant una **mètrica de distància diferent a la distància euclidiana** i compareu els resultats.
+
+
+4. Utilitzar els algorismes **DBSCAN** y **OPTICS**, provant amb diferents valors del paràmetre `eps` i `minPts`, i comparar els resultats amb els mètodes anteriors. Comenteu si el nombre de clústers coincideix amb el punt 1 i si els casos que els formen són similars.
+
+
+**Models supervisats**
+
+5. Seleccionar una mostra d'entrenament i una de test utilitzant les proporcions que es considerin més adequades en funció de la disponibilitat de dades. Justificar aquesta selecció.
+
+6. Un cop definida la variable objecte que es vol predir, aplicar un model de generació de regles a partir de **arbres de decisió** i ajustar les diferents opcions (mida mínima dels nodes, criteris de divisió, ...) per al seu entrenament. Obtenir l'arbre sense i amb opcions de poda. Obtenir la matriu de confusió. Finalment, comparar els resultats obtinguts amb opcions de poda i sense. Alternativament, si la variable objecte destudi és quantitativa pura sobtenen els criteris d'error que ens permetin determinar la capacitat predictiva.
+
+7. Aplicar un **model supervisat** diferent del punt 6 (pot ser un algorisme d'arbres de decisió diferent o un altre algorisme supervisat alternatiu). Compareu el resultat amb el model generat anteriorment. Es poden utilitzar els criteris d'avaluació de models descrits al material docent de l'assignatura.
+
+
+**Limitacions i conclusions finals**
+
+8. Identificar possibles **limitacions** del conjunt de dades seleccionat i **analitzar els riscos** en cas d’utilitzar els models entrenats per classificar un nou cas. Per exemple, en els models supervisats poden aparèixer dificultats de sobreajustament; en el cas de la classificació, els percentatges de falsos positius i falsos negatius poden ser similars, etc.. Resum de les **principals conclusions** obtingudes dels models no supervisats i supervisats.
+
+**Interacció amb la IA**
+
+9. Utilitzar la IA per aprofundir en la reflexió sobre els models apresos, els resultats obtinguts i les seves possibles millores. Per exemple, en el cas dels models no supervisats, es podria plantejar, entre altres, si és adequat emprar distàncies diferents de l’euclídia, en quins contextos serien més convenients i quines alternatives existeixen. Pel que fa als models supervisats, seria pertinent analitzar amb més detall quins tipus d’errors cometen els models entrenats i explorar possibles alternatives que permetin millorar els resultats assolits.
+
+
+**NOTA IMPORTANT:** *Recordeu que si les variables a la vostra base de dades tenen unitats de mesura molt diferents és recomanable transformar les variables per evitar l’efecte d’escala derivat d’aquestes unitats de mesura.*
+
+******
+# Recursos de programació
+******
+* Incloem en aquest apartat una llista de recursos de programació per a mineria de dades on podreu trobar exemples, idees i inspiració:
+ 
+  + [Espai de recursos UOC per a ciència de dades](http://datascience.recursos.uoc.edu/es/)
+  + [Cercador de codi R](https://rseek.org/)
+  + [Col·lecció de cheatsheets en R](https://rstudio.com/resources/cheatsheets/)
+  
+******
+# Data de lliurament
+******
+
+La data límit de lliurament és el 10/06/2026.
+
+
+******
+# RESPOSTES
+******
+
+## Exercici 1 (20%)
+
+### S'obté l'agrupació mitjançant k-means amb les dades originals i normalitzades.
+
+### S'analitzen, mostren i comenten les mesures de qualitat del model generat.
+
+### S’interpreten els centres, la mida dels grups i la seva dispersió.
+
+
+***
+
+## Exercici 2 (10%)
+
+### S'obté l'agrupació k-medians amb el nombre de grups seleccionat a l'exercici 1 (de manera opcional, també es pot obtenir l’agrupament mitjançant el mètode *around medoids*).
+
+### Es comparen els resultats amb els obtinguts a l'exercici 1. Es recomana utilitzar, per exemple, algun tipus de taula de freqüències creuades.
+
+### S’interpreten els centres, la mida dels grups i la seva dispersió.
+
+***
+
+## Exercici 3 (10%)
+
+### S'obté l'agrupació mitjançant k-means (amb els grups seleccionats a l'exercici 1), però usant una mètrica de distància diferent.
+
+### Es comparen els resultats amb els obtinguts als exercicis 1 i 2. Es recomana utilitzar, per exemple, algun tipus de taula de freqüències creuades.
+
+### S’interpreten els centres, la mida dels grups i la seva dispersió.
+
+***
+## Exercici 4 (10%)
+
+### S’aplica correctament els algorisme DBSCAN i OPTICS.
+
+### S’analitzen, es descriuen i s’interpreten els resultats obtinguts amb diferents valors d'`eps` i `minPts`.
+
+### S'obté una mesura de com és de bo l'agrupament.
+
+### Es comparen els resultats obtinguts amb els models k-means i k-medians. Per exemple, analitzar si el nombre de grups coincideix i si les seves característiques són similars.
+
+### Es descriuen els grups en funció de les mitjanes de les variables utilitzades en l’algorisme.
+
+
+***
+
+## Exercici 5 (5%)
+
+### Es seleccionen les mostres d'entrenament i test.
+
+### Es justifiquen les proporcions seleccionades.
+
+***
+
+## Exercici 6 (20%)
+
+### S’entrena l’arbre de decisió, es generen regles i se seleccionen i s’interpreten les més significatives.
+
+### S'extreuen les regles del model en format text i gràfic.
+
+### Addicionalment, es genera la matriu de confusió per mesurar la capacitat predictiva de l'algorisme, tenint en compte les diferents mètriques associades a aquesta matriu (precisió, sensibilitat, especificitat...). Alternativament, si la variable objecte destudi és quantitativa pura sobtenen els criteris d'error que ens permetin determinar la capacitat predictiva.
+
+### Es comparen i interpreten els resultats sense i amb opcions de poda.
+
+### Es descriuen les regles obtingudes.
+
+***
+
+## Exercici 7 (10%)
+
+### Es prova amb un altre tipus d’arbre de decisió (per exemple, un criteri de partició diferent) o amb un altre tipus d’algorisme supervisat.
+
+### Es detalla, comenta i avalua la qualitat de classificació o de l'ajust.
+
+### Es comparen els resultats amb el mètode supervisat de l'exercici 6.
+
+***
+
+## Exercici 8 (10%)
+
+### S'identifica quines possibles limitacions tenen les dades que heu seleccionat per obtenir conclusions amb els models (supervisat i no supervisat).
+
+### S'identifiquen possibles riscos de l'ús del model i se’n resumeixen les principals conclusions (mínim 300 paraules).
+
+***
+
+## Interacció amb la IA (5%)
+
+### Realitzar almenys 3 consultes tenint en compte el que s’ha proposat al punt 9 de l’enunciat.
+
+
+***
