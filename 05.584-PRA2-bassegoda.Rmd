@@ -18,7 +18,22 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.align = "center", fig.width = 7, fig.height = 4.5)
+```
+
+```{r llibreries, include=FALSE}
+# Models no supervisats
+library(cluster)       # k-medians (pam/clara), silhouette
+library(factoextra)    # diagnòstics i visualització de clústers
+library(dbscan)        # DBSCAN i OPTICS
+# Models supervisats
+library(rpart)         # arbres de decisió (CART)
+library(rpart.plot)    # visualització d'arbres
+library(C50)           # arbres de decisió C5.0 (criteri alternatiu)
+library(randomForest)  # model supervisat alternatiu
+library(caret)         # particions i matrius de confusió
+set.seed(42)           # reproductibilitat
 ```
 ******
 
@@ -26,7 +41,8 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ******
 
-Tal com s’ha fet en les tres PEC i en la PRA1, en aquesta activitat es permet l’ús d’eines d’IA generativa. Es demana realitzar **com a mínim 3 consultes**.
+Tal com s’ha fet en les tres PEC i en la PRA1, en aquesta activitat es permet 
+l’ús d’eines d’IA generativa. Es demana realitzar **com a mínim 3 consultes**.
 
 De la mateixa manera que en la PRA1, és fonamental documentar de manera clara i
 estructurada la interacció amb eines d’intel·ligència artificial
@@ -151,14 +167,366 @@ La data límit de lliurament és el 10/06/2026.
 # RESPOSTES
 ******
 
+## Descripció del joc de dades
+
+El joc de dades `clinical_clean.csv` prové de **VitalDB**, un repositori d'alta
+fidelitat de senyals vitals i dades clíniques de pacients quirúrgics de l'Hospital
+Universitari Nacional de Seül. Cada fila correspon a una **cirurgia** i recull
+informació del pacient, de l'acte quirúrgic i del seu desenllaç. La versió que
+emprem aquí és la que es va netejar i preparar a la **Pràctica 1** (5.926 casos i
+78 variables).
+
+### Glossari de variables explicat per a no especialistes
+
+A continuació es resumeix, en termes entenedors per a una audiència no
+mèdica, què representa cada variable del fitxer `clinical_clean.csv`. La
+descripció s'ha elaborat a partir del diccionari oficial de VitalDB i del
+paper de referència del dataset (Lee et al., *Scientific Data*, 2022).
+
+**Identificadors i temps del cas (registre de la cirurgia):**
+
+- **caseid**: identificador anònim del cas (cada fila = una cirurgia).
+- **subjectid**: identificador anònim del pacient. Un mateix pacient pot
+  aparèixer en més d'un cas si ha estat operat diverses vegades.
+- **casestart / caseend**: instant d'inici i fi de l'enregistrament del
+  cas, en segons. `casestart` es fixa a 0 per anonimització.
+- **anestart / aneend**: instant d'inici i fi de l'**anestèsia**, en segons
+  des de `casestart`.
+- **opstart / opend**: instant d'inici i fi de la **cirurgia** pròpiament
+  dita (sol estar dins de la finestra d'anestèsia).
+- **adm / dis**: instants d'**admissió** a l'hospital i **alta** del
+  pacient, en segons des de `casestart` (poden ser negatius si l'admissió
+  és anterior a l'inici del cas).
+
+**Variables de resultat (outcomes — el que volem predir):**
+
+- **icu_days**: dies que el pacient ha passat a la **UCI** després de la
+  cirurgia (0 si no hi ha ingressat).
+- **death_inhosp**: 1 si el pacient mor durant l'ingrés hospitalari, 0
+  altrament. És una de les variables de resultat candidates per a l'anàlisi
+  supervisat.
+
+**Dades demogràfiques i estat general del pacient:**
+
+- **age**: edat en anys.
+- **sex**: sexe (`M` masculí / `F` femení).
+- **height / weight**: alçada (cm) i pes (kg).
+- **bmi**: índex de massa corporal (pes/alçada²), un indicador d'obesitat.
+- **asa**: classificació **ASA** de l'estat físic preoperatori
+  (Societat Americana d'Anestesiologia). Va de 1 (pacient sa) a 6 (donant
+  d'òrgans en mort cerebral); a la pràctica clínica es fa servir
+  habitualment d'1 a 5 i és un dels millors predictors de risc quirúrgic.
+- **emop**: 1 si la cirurgia és d'**urgència**, 0 si és programada.
+
+**Tipus de cirurgia i posicionament del pacient:**
+
+- **department**: departament quirúrgic responsable (cirurgia general,
+  toràcica, urològica, ginecològica...).
+- **optype**: categoria àmplia del tipus de cirurgia (per exemple
+  Colorectal, Stomach, Hepatic...).
+- **dx**: diagnòstic principal que motiva la cirurgia (text lliure).
+- **opname**: nom específic de la intervenció (text lliure).
+- **approach**: via d'abordatge: **oberta** (cirurgia tradicional),
+  **laparoscòpica** o **robòtica** (mínimament invasives).
+- **position**: postura del pacient a la taula d'operacions (decúbit
+  supí, lateral, litotomia...).
+- **ane_type**: tipus d'anestèsia (general, regional, sedació, etc.).
+
+**Antecedents i estudis preoperatoris (estat clínic abans d'operar):**
+
+- **preop_htn**: 1 si el pacient té **hipertensió** prèvia.
+- **preop_dm**: 1 si té **diabetis** prèvia.
+- **preop_ecg**: troballa de l'**electrocardiograma** preoperatori (ritme
+  sinusal normal, arrítmia, etc.).
+- **preop_pft**: resultat de la **prova de funció pulmonar** preoperatòria
+  (normal, restrictiva, obstructiva...).
+
+**Analítica de sang preoperatòria** (mesures rutinàries abans de la
+cirurgia; valors fora de rang indiquen problemes mèdics):
+
+- **preop_hb**: **hemoglobina** (g/dL). Valors baixos = anèmia.
+- **preop_plt**: recompte de **plaquetes** (x1000/µL). Crucial per la
+  coagulació.
+- **preop_pt**: **temps de protrombina** (%). Mesura de coagulació.
+- **preop_aptt**: **temps de tromboplastina parcial activada** (s).
+  Una altra mesura de coagulació.
+- **preop_na**: **sodi** sèric (mmol/L).
+- **preop_k**: **potassi** sèric (mmol/L).
+- **preop_gluc**: **glucosa** en sang (mg/dL).
+- **preop_alb**: **albúmina** (g/dL). Marcador de nutrició i estat
+  general.
+- **preop_ast** (GOT) i **preop_alt** (GPT): enzims hepàtics (UI/L).
+  Valors elevats = lesió hepàtica.
+- **preop_bun**: **urea** en sang (mg/dL). Indicador de funció renal.
+- **preop_cr**: **creatinina** sèrica (mg/dL). Marcador clau de funció
+  renal.
+
+**Gasometria arterial preoperatòria** (oxigenació i equilibri àcid-base):
+
+- **preop_ph**: pH de la sang arterial.
+- **preop_hco3**: bicarbonat (mmol/L).
+- **preop_be**: excés de bases (mmol/L).
+- **preop_pao2**: pressió parcial d'**oxigen** arterial (mmHg).
+- **preop_paco2**: pressió parcial de **CO₂** arterial (mmHg).
+- **preop_sao2**: saturació d'oxigen arterial (%).
+
+**Maneig de la via aèria i tubs d'anestèsia:**
+
+- **cormack**: classificació de **Cormack-Lehane**, dificultat per veure
+  la glotis durant la intubació (I = fàcil, IV = molt difícil).
+- **airway**: via per la qual es ventila el pacient (oral, nasal, etc.).
+- **tubesize**: diàmetre del tub endotraqueal (mm).
+- **dltubesize**: mida del tub de **doble llum** (Fr) si cal aïllar un
+  pulmó (cirurgia toràcica).
+- **lmasize**: mida de la **màscara laríngia** si s'usa en lloc del tub.
+
+**Vies vasculars** (zones del cos on s'han col·locat catèters):
+
+- **iv1, iv2**: lloc de la primera i segona via **intravenosa
+  perifèrica** (per administrar fluids i medicació).
+- **aline1, aline2**: lloc de la primera i segona **línia arterial**
+  (mesurar la tensió en directe i extreure gasometries).
+- **cline1, cline2**: lloc del primer i segon **catèter venós central**
+  (cirurgies grans o pacients crítics).
+
+**Esdeveniments intraoperatoris** (què passa durant la cirurgia):
+
+- **intraop_ebl**: pèrdua de sang estimada (mL).
+- **intraop_uo**: volum d'**orina** durant la cirurgia (mL); marcador
+  indirecte de perfusió renal.
+- **intraop_rbc**: unitats de **concentrats d'hematies** transfosos.
+- **intraop_ffp**: unitats de **plasma fresc congelat** transfosos.
+- **intraop_crystalloid**: volum total de sèrum (cristal·loides) infós
+  (mL).
+- **intraop_colloid**: volum de **col·loides** (expansors de plasma) en
+  mL.
+
+**Fàrmacs anestèsics i de suport hemodinàmic administrats durant la
+cirurgia:**
+
+- **intraop_ppf**: **propofol** en bolus (mg). Anestèsic intravenós.
+- **intraop_mdz**: **midazolam** (mg). Sedant.
+- **intraop_ftn**: **fentanil** (µg). Analgèsic opioide potent.
+- **intraop_rocu**: **rocuroni** (mg). Bloquejador neuromuscular.
+- **intraop_vecu**: **vecuroni** (mg). Bloquejador neuromuscular.
+- **intraop_eph**: **efedrina** (mg). Vasopressor (puja la tensió).
+- **intraop_phe**: **fenilefrina** (µg). Vasopressor.
+- **intraop_epi**: **adrenalina** (µg). Vasopressor potent en
+  hipotensió greu o aturada.
+- **intraop_ca**: **clorur de calci** (mg). Reposició electrolítica i
+  suport contràctil cardíac.
+
+**Variables derivades a la Pràctica 1** (no figuren al diccionari original;
+es van calcular durant la preparació de les dades):
+
+- **icu_admission**: indicador `No/Sí` d'ingrés a la **UCI** després de la
+  cirurgia (derivat de `icu_days > 0`). És la **variable objectiu** que
+  predirem als exercicis supervisats (5–7); s'ha triat per davant de
+  `death_inhosp` perquè aquesta última és molt minoritària (≈ 0,8 % de casos)
+  i faria que un classificador trivial ja encertés gairebé sempre.
+- **op_duration_min**: durada de la **cirurgia** en minuts
+  (`opend − opstart`).
+- **ane_duration_min**: durada de l'**anestèsia** en minuts
+  (`aneend − anestart`).
+- **los_hosp_days**: durada de l'**estada hospitalària** en dies
+  (*length of stay*).
+
+> *Font:* Lee, H.-C., Park, Y., Yoon, S. B., Yang, S. M., Park, D., &
+> Jung, C.-W. (2022). *VitalDB, a high-fidelity multi-parameter vital
+> signs database in surgical patients*. **Scientific Data**, 9, 279.
+> Diccionari oficial: `clinical_parameters.csv` del dataset.
+
+***
+
+## Preparació de les dades (comuna als exercicis 1–4)
+
+Carreguem el joc de dades net generat a la Pràctica 1 i construïm la matriu de
+treball per als models **no supervisats**. L'enunciat indica que cal emprar
+únicament **variables quantitatives o binàries**; per tant descartem:
+
+- **Identificadors i marques de temps** (`caseid`, `subjectid`, `casestart`,
+  `opstart`, …): no aporten informació de perfil clínic.
+- **Variables categòriques de text** (`department`, `optype`, `dx`, `opname`,
+  `approach`, …): no són mètriques i no entren en una distància euclidiana.
+- **Variables de resultat** (*outcomes*: `icu_admission`, `death_inhosp`,
+  `los_hosp_days`, `icu_days`, `op_duration_min`): les reservem per als models
+  supervisats (exercicis 5–7), de manera que l'agrupament descrigui el **perfil
+  del pacient i de la intervenció**, no el seu desenllaç.
+
+Les variables binàries `No/Sí` (`emop`, `preop_htn`, `preop_dm`) es recodifiquen
+a `0/1` per poder-les tractar numèricament.
+
+```{r prep-dades}
+dades <- read.csv("clinical_clean.csv", stringsAsFactors = FALSE)
+
+# Recodifiquem els indicadors binaris No/Sí a 0/1
+bin_flags <- c("emop", "preop_htn", "preop_dm")
+for (b in bin_flags) dades[[b]] <- ifelse(dades[[b]] == "Sí", 1L, 0L)
+
+# Columnes excloses: identificadors, marques de temps i variables de resultat
+excloses <- c("caseid", "subjectid", "casestart", "caseend", "anestart",
+              "aneend", "opstart", "opend", "adm", "dis", "icu_days",
+              "op_duration_min", "ane_duration_min", "los_hosp_days",
+              "death_inhosp", "icu_admission")
+
+num_cols <- names(dades)[sapply(dades, is.numeric)]
+candidates <- setdiff(union(num_cols, bin_flags), excloses)
+```
+
+Diverses variables tenen una proporció elevada de valors absents (les gasometries
+preoperatòries superen el 90 %). Com que l'agrupament treballa amb **casos
+complets**, hi ha un compromís entre *nombre de variables* i *nombre de casos*.
+Provem diferents llindars de valors absents:
+
+```{r prep-llindar}
+llindars <- c(0.40, 0.25, 0.20, 0.10, 0.05)
+taula <- sapply(llindars, function(thr) {
+  f <- candidates[colMeans(is.na(dades[candidates])) <= thr]
+  c(variables = length(f), casos = sum(complete.cases(dades[f])))
+})
+colnames(taula) <- paste0("≤", llindars * 100, "%")
+taula
+```
+
+Un llindar del **20 %** és el punt d'equilibri: conserva **33 variables** i
+**5.249 casos** (≈ 89 % de les files), descartant només `intraop_ebl` i
+`tubesize` —les dues variables que més files eliminaven— respecte del llindar del
+40 %. Fixem aquest criteri i construïm la matriu de treball, amb la versió
+**original** i la **normalitzada** (centrada i escalada, *z-score*):
+
+```{r prep-matriu}
+vars_model <- candidates[colMeans(is.na(dades[candidates])) <= 0.20]
+X  <- dades[vars_model]
+X  <- X[complete.cases(X), ]   # 5.249 casos complets
+Xs <- scale(X)                  # versió normalitzada (z-score)
+
+dim(X)
+vars_model
+```
+
+***
+
 ## Exercici 1 (20%)
 
 ### S'obté l'agrupació mitjançant k-means amb les dades originals i normalitzades.
 
+Apliquem *k-means* sobre les dues versions de la matriu. Abans, però, cal decidir
+el **nombre de clústers** *k*. Fem servir dos diagnòstics complementaris sobre les
+dades **normalitzades**: el mètode del **colze** (suma de quadrats intra-clúster,
+*WSS*) i el **coeficient de silueta** mitjà.
+
+```{r ex1-nbclust, fig.width=10, fig.height=4}
+set.seed(42)
+g_wss <- fviz_nbclust(Xs, kmeans, method = "wss", k.max = 10) +
+  labs(title = "Mètode del colze (dades normalitzades)")
+# La silueta té cost O(n²); l'estimem sobre una submostra de 1.500 casos
+set.seed(1); sub <- sample(nrow(Xs), 1500)
+g_sil <- fviz_nbclust(Xs[sub, ], kmeans, method = "silhouette", k.max = 8) +
+  labs(title = "Coeficient de silueta (submostra n=1.500)")
+gridExtra::grid.arrange(g_wss, g_sil, ncol = 2)
+```
+
+La corba del colze descendeix de manera **suau**, sense un canvi de pendent
+nítid: és habitual en dades clíniques d'alta dimensió, on l'estructura és més un
+*gradient* que no pas grups esfèrics ben separats. El **coeficient de silueta**,
+en canvi, és concloent: assoleix el màxim a **k = 2** (≈ 0,60) i cau de cop a
+k = 3 (≈ 0,19). Triem doncs **k = 2**.
+
+Ajustem ara *k-means* amb k = 2 sobre les **dues** versions de les dades per
+comparar l'efecte de l'escala:
+
+```{r ex1-kmeans}
+set.seed(42)
+km_raw <- kmeans(X,  centers = 2, nstart = 25, iter.max = 50)  # dades originals
+km_std <- kmeans(Xs, centers = 2, nstart = 25, iter.max = 50)  # dades normalitzades
+```
+
 ### S'analitzen, mostren i comenten les mesures de qualitat del model generat.
+
+Comparem la qualitat dels dos models amb la silueta mitjana (sobre la mateixa
+submostra) i la proporció de variància explicada (`betweenss/totss`):
+
+```{r ex1-qualitat}
+sil_raw <- mean(silhouette(kmeans(X[sub, ],  2, nstart = 25)$cluster, dist(X[sub, ]))[, 3])
+sil_std <- mean(silhouette(kmeans(Xs[sub, ], 2, nstart = 25)$cluster, dist(Xs[sub, ]))[, 3])
+
+data.frame(
+  Model               = c("Dades originals", "Dades normalitzades"),
+  Silueta_mitjana     = round(c(sil_raw, sil_std), 3),
+  Variancia_explicada = round(c(km_raw$betweenss / km_raw$totss,
+                                km_std$betweenss / km_std$totss), 3),
+  Mides               = c(paste(km_raw$size, collapse = " / "),
+                          paste(km_std$size, collapse = " / "))
+)
+```
+
+Aparentment les **dades originals** donen una silueta més alta (≈ 0,72 enfront de
+≈ 0,60). Aquesta xifra, però, és **enganyosa**: en absència d'escala, la distància
+euclidiana queda dominada per les variables de magnitud més gran —sobretot
+`intraop_crystalloid`, expressada en mil·lilitres (ordres de milers)— i per les
+variables de transfusió. L'agrupament resultant separa essencialment *volum de
+fluïdoteràpia*, no un **perfil clínic integral**. Aquest és exactament l'efecte
+d'escala que adverteix l'enunciat. Per això **seleccionem el model amb les dades
+normalitzades**, on totes les variables hi contribueixen per igual.
+
+```{r ex1-cluster-plot, fig.width=7, fig.height=5}
+fviz_cluster(km_std, data = Xs, geom = "point", alpha = 0.3,
+             ellipse.type = "norm",
+             main = "k-means (k=2) sobre dades normalitzades — projecció PCA") +
+  theme_minimal()
+```
+
+La projecció sobre les dues primeres components principals mostra un grup gran i
+compacte i un grup menor i més dispers. La variància explicada és baixa
+(`betweenss/totss` ≈ 0,07): k-means captura poca separació global, coherent amb
+una estructura de tipus gradient. Tot i així la silueta (0,60) i, sobretot, la
+**interpretabilitat clínica** dels grups (apartat següent) justifiquen la solució.
 
 ### S’interpreten els centres, la mida dels grups i la seva dispersió.
 
+Recuperem els centres en **escala original** (mitjana de cada variable per grup)
+per fer-los interpretables clínicament, i la dispersió intra-grup:
+
+```{r ex1-centres}
+grup <- km_std$cluster
+centres <- aggregate(X, list(Grup = grup), mean)
+destacades <- c("age", "bmi", "asa", "emop", "preop_htn", "preop_hb",
+                "preop_alb", "preop_cr", "intraop_crystalloid",
+                "intraop_rbc", "intraop_ftn")
+round(t(centres[, destacades]), 2)
+```
+
+```{r ex1-mides-dispersio}
+# Mida dels grups i dispersió (WSS per grup / nombre de casos)
+data.frame(
+  Grup       = 1:2,
+  Mida       = km_std$size,
+  Percentatge= round(100 * km_std$size / sum(km_std$size), 1),
+  WSS        = round(km_std$withinss),
+  WSS_per_cas= round(km_std$withinss / km_std$size, 2)
+)
+```
+
+**Interpretació dels grups:**
+
+- **Grup 1 (≈ 676 casos, 13 %) — pacients d'alt risc / comòrbids.** Presenten un
+  *ASA* més alt (≈ 2,5), una proporció molt superior de **cirurgia urgent**
+  (`emop` ≈ 0,39 enfront de 0,07) i d'**hipertensió**, una **hemoglobina**
+  preoperatòria més baixa (≈ 10,6) i **albúmina** baixa (≈ 3,4) —signe de pitjor
+  estat nutricional—, i una **creatinina** clarament elevada (≈ 2,9, indici
+  d'insuficiència renal). Intraoperatòriament reben molt més **cristal·loide**
+  (≈ 2,4 L) i més transfusió. És el grup amb **major dispersió** (WSS per cas més
+  alt), reflex de la seva heterogeneïtat clínica.
+- **Grup 2 (≈ 4.573 casos, 87 %) — pacients d'estàndard de risc.** *ASA* ≈ 1,75,
+  poca cirurgia urgent, **analítica preoperatòria dins de la normalitat**
+  (hemoglobina ≈ 13,2, albúmina ≈ 4,2, creatinina ≈ 0,8) i menor necessitat de
+  fluïdoteràpia. És un grup gran, compacte i homogeni.
+
+En síntesi, *k-means* amb dades normalitzades i k = 2 identifica una partició
+clínicament rellevant: **pacient quirúrgic complex/fràgil** enfront de **pacient
+quirúrgic estàndard**. Aquesta agrupació servirà de referència per comparar-la
+amb *k-medians* (exercici 2), una mètrica no euclidiana (exercici 3) i els
+mètodes basats en densitat (exercici 4).
 
 ***
 

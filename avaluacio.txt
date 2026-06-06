@@ -1,0 +1,38 @@
+Criteris d'avaluació
+
+Exercici 1 - 20%
+S'obté l'agrupació mitjançant k-means amb les dades originals i normalitzades.
+S'analitzen, mostren i comenten les mesures de qualitat del model generat.
+S’interpreten els centres, la mida dels grups i la seva dispersió.
+ Exercici 2 - 10%
+S'obté l'agrupació k-medians amb el nombre de grups seleccionat a l'exercici 1 (de manera opcional, també es pot obtenir l’agrupament mitjançant el mètode *around medoids*). 
+Es comparen els resultats amb els obtinguts a l'exercici 1. Es recomana utilitzar, per exemple, algun tipus de taula de freqüències creuades.
+S’interpreten els centres, la mida dels grups i la seva dispersió.
+Exercici 3 - 10%
+S'obté l'agrupació mitjançant k-means (amb els grups seleccionats a l'exercici 1), però usant una mètrica de distància diferent.
+Es comparen els resultats amb els obtinguts als exercicis 1 i 2. Es recomana utilitzar, per exemple, algun tipus de taula de freqüències creuades.
+S’interpreten els centres, la mida dels grups i la seva dispersió.
+Exercici 4 - 10%
+S’aplica correctament l’algorisme DBSCAN i OPTICS.
+Es proven, descriuen i interpreten els resultats amb diferents valors d'`eps` i `minPts`.
+S'obté una mesura de com és de bo l'agrupament.
+Es comparen els resultats obtinguts amb els models k-means i k-medians. Per exemple, analitzar si el nombre de grups coincideix i si les seves característiques són similars.
+Es comenten els resultats.
+Exercici 5 - 5%
+Es seleccionen les mostres d'entrenament i test.
+Es justifiquen les proporcions seleccionades.
+Exercici 6 - 20%
+Es generen regles i es seleccionen i interpreten les més significatives.
+S'extreuen les regles del model en format text i gràfic.
+Addicionalment, es genera la matriu de confusió per mesurar la capacitat predictiva de l'algorisme, tenint en compte les diferents mètriques associades a aquesta matriu (precisió, sensibilitat, especificitat...). Alternativament, si la variable objecte destudi és quantitativa pura sobtenen els criteris d'error que ens permetin determinar la capacitat predictiva.
+Es comparen i interpreten els resultats sense i amb opcions de poda.
+Es descriuen les regles obtingudes.
+Exercici 7 - 10%
+Es prova amb un altre tipus d’arbre de decisió (per exemple, un criteri de partició diferent) o amb un altre tipus d’algorisme supervisat.
+Es detalla, comenta i avalua la qualitat de classificació o de l'ajust.
+Es comparen els resultats amb el mètode supervisat de l'exercici 6.
+Exercici 8 - 10%
+S'identifica quines possibles limitacions tenen les dades que heu seleccionat per obtenir conclusions amb els models (supervisat i no supervisat).
+S'identifiquen possibles riscos de l'ús del model i se’n resumeixen les principals conclusions (mínim 300 paraules).
+Interacció amb la IA - 5%
+Realitzar almenys 3 consultes tenint en compte el que s’ha proposat al punt 9 de l’enunciat.
