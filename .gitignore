@@ -1,0 +1,35 @@
+# --- RStudio y Archivos de Configuración Interna ---
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+
+# --- renv (Gestión de Paquetes) ---
+# Ignoramos la librería local porque contiene los binarios específicos del OS (Linux/Mac)
+renv/library/
+renv/sandbox/
+
+# Ignoramos los recursos locales e infraestructura temporal
+renv/python/
+renv/staging/
+
+# ¡ATENCIÓN! NO ignores estos archivos. Deben subirse a Git:
+# !renv/activate.R
+# !renv/settings.json
+# !renv/lockfile.json (este es el renv.lock, vital para Mac y Linux)
+
+# --- Archivos del Sistema Operativo ---
+# Archivos temporales de macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Archivos temporales de Linux / Carpetas de escritorio
+.directory
+*~
+
+# --- Datos e Informes (Opcional pero recomendado) ---
+# Evita subir datos pesados o los informes ya renderizados si no es necesario
+*.html
+*.pdf
