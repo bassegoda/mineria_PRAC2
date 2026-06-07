@@ -38,66 +38,6 @@ set.seed(42)           # reproductibilitat
 ```
 ******
 
-# Documentació de la interacció amb IA generativa
-
-******
-
-Tal com s’ha fet en les tres PEC i en la PRA1, en aquesta activitat es permet 
-l’ús d’eines d’IA generativa. Es demana realitzar **com a mínim 3 consultes**.
-
-De la mateixa manera que en la PRA1, és fonamental documentar de manera clara i
-estructurada la interacció amb eines d’intel·ligència artificial
-generativa (com ChatGPT o d’altres). No es tracta només d’obtenir
-respostes, sinó d’entendre com aquestes eines poden ajudar-nos a
-resoldre problemes, prendre decisions i reflexionar críticament sobre
-els resultats que ofereixen. Per això, proposem una guia que agrupi les
-preguntes que es plantegen a la IA en cinc categories principals.
-Aquesta classificació no només facilita l’anàlisi posterior, sinó que
-també ajuda a identificar patrons en el tipus de suport que cerquem.
-
-## Categories de preguntes
-
--   **Metodologia**: Preguntes relacionades amb bones pràctiques,
-    aproximacions recomanades i marcs metodològics.
-
--   **Programació**: Consultes sobre implementació de codi, tant en R
-    com en Python.
-
--   **Diagnosi**: Preguntes orientades a identificar i resoldre errors o
-    comportaments inesperats.
-
--   **Interpretació**: Dubtes sobre com entendre els resultats
-    obtinguts, el seu significat i possibles implicacions.
-
--   **Extensió**: Preguntes obertes que busquen que la IA proposi noves
-    línies de treball, idees o millores.
-
-## Esquema de documentació
-
-Per a cada categoria, es documentarà la interacció amb la IA seguint
-aquest esquema:
-
-1.  **Pregunta traslladada a la IA generativa** Què s’ha preguntat
-    exactament?
-
-2.  **Resposta obtinguda** Quin tipus de resposta s’ha rebut? (pot
-    incloure scripts, enllaços, gràfics, explicacions, etc.)
-
-3.  **Decisió** Què s’ha fet amb aquesta resposta? S’ha aplicat
-    directament, s’ha modificat, s’ha descartat?
-
-4.  **Reflexió crítica** Quins problemes s’han detectat? Quines millores
-    s’han realitzat? Quins aprenentatges se n’han extret?
-
-Aquesta estructura no només ens permet aprofitar el potencial de la IA
-generativa com a eina de *suport tècnic i metodològic*, sinó que també
-ens obliga a mantenir una actitud crítica i reflexiva sobre el seu ús.
-Documentar cada interacció amb aquest nivell de detall ens ajuda a
-entendre millor com prenem decisions, quin tipus d’ajuda cerquem i com
-podem millorar els nostres processos. A més, ens permet *justificar de
-manera transparent* l’ús d’aquestes eines en el context de l’activitat,
-alineant-se amb bones pràctiques de treball col·laboratiu i responsable.
-
 
 ******
 # Enunciat
@@ -148,21 +88,6 @@ D'aquesta manera es demana a l'estudiant que completi els passos següents amb e
 
 **NOTA IMPORTANT:** *Recordeu que si les variables a la vostra base de dades tenen unitats de mesura molt diferents és recomanable transformar les variables per evitar l’efecte d’escala derivat d’aquestes unitats de mesura.*
 
-******
-# Recursos de programació
-******
-* Incloem en aquest apartat una llista de recursos de programació per a mineria de dades on podreu trobar exemples, idees i inspiració:
- 
-  + [Espai de recursos UOC per a ciència de dades](http://datascience.recursos.uoc.edu/es/)
-  + [Cercador de codi R](https://rseek.org/)
-  + [Col·lecció de cheatsheets en R](https://rstudio.com/resources/cheatsheets/)
-  
-******
-# Data de lliurament
-******
-
-La data límit de lliurament és el 10/06/2026.
-
 
 ******
 # RESPOSTES
@@ -180,9 +105,10 @@ emprem aquí és la que es va netejar i preparar a la **Pràctica 1** (5.926 cas
 ### Glossari de variables explicat per a no especialistes
 
 A continuació es resumeix, en termes entenedors per a una audiència no
-mèdica, què representa cada variable del fitxer `clinical_clean.csv`. La
-descripció s'ha elaborat a partir del diccionari oficial de VitalDB i del
-paper de referència del dataset (Lee et al., *Scientific Data*, 2022).
+mèdica igual que vàrem fer a la PRAC1, què representa cada variable del 
+fitxer `clinical_clean.csv`. La descripció s'ha elaborat a partir del 
+diccionari oficial de VitalDB i del paper de referència del dataset 
+(Lee et al., *Scientific Data*, 2022).
 
 **Identificadors i temps del cas (registre de la cirurgia):**
 
@@ -393,7 +319,7 @@ Un llindar del **20 %** és el punt d'equilibri: conserva **33 variables** i
 **5.249 casos** (≈ 89 % de les files), descartant només `intraop_ebl` i
 `tubesize` —les dues variables que més files eliminaven— respecte del llindar del
 40 %. Fixem aquest criteri i construïm la matriu de treball, amb la versió
-**original** i la **normalitzada** (centrada i escalada, *z-score*):
+**original** i la **normalitzada** (centrada i escalada amb *z-score*):
 
 ```{r prep-matriu}
 vars_model <- candidates[colMeans(is.na(dades[candidates])) <= 0.20]
@@ -428,7 +354,7 @@ g_sil <- fviz_nbclust(Xs, kmeans, method = "silhouette", k.max = 8) +
 gridExtra::grid.arrange(g_wss, g_sil, ncol = 2)
 ```
 
-La corba del colze descendeix de manera **suau**, sense un canvi de pendent
+La corba del colze descendeix de manera suau, sense un canvi de pendent
 nítid: és habitual en dades clíniques d'alta dimensió, on l'estructura és més un
 *gradient* que no pas grups esfèrics ben separats. El **coeficient de silueta**,
 en canvi, és concloent: assoleix el màxim a **k = 2** (≈ 0,37) i cau de cop a
@@ -517,7 +443,8 @@ data.frame(
   preoperatòria més baixa (≈ 10,6) i **albúmina** baixa (≈ 3,4) —signe de pitjor
   estat nutricional—, i una **creatinina** clarament elevada (≈ 2,9, indici
   d'insuficiència renal). Intraoperatòriament reben molt més **cristal·loide**
-  (≈ 2,4 L) i més transfusió. És el grup amb **major dispersió** (WSS per cas més
+  (≈ 2,4 L) i més transfusió. Això vol dir que han sagnat més durant la cirurgia
+  probablement. És el grup amb **major dispersió** (WSS per cas més
   alt), reflex de la seva heterogeneïtat clínica.
 - **Grup 2 (≈ 4.564 casos, 87 %) — pacients d'estàndard de risc.** *ASA* ≈ 1,75,
   poca cirurgia urgent, **analítica preoperatòria dins de la normalitat**
@@ -572,7 +499,7 @@ d'agrupament equivalent** i confirmen que k = 2 també és una elecció raonable
 
 ### Es comparen els resultats amb els obtinguts a l'exercici 1. Es recomana utilitzar, per exemple, algun tipus de taula de freqüències creuades.
 
-Encreuem l'assignació de *k-means* (exercici 1) amb la de *k-medians* en una **taula
+Creuem l'assignació de *k-means* (exercici 1) amb la de *k-medians* en una **taula
 de freqüències creuades**. Com que en tots dos models el grup 1 és el d'alt risc,
 la diagonal mesura les coincidències:
 
@@ -873,7 +800,7 @@ el **nombre de clústers** (1). La lectura conjunta és clara: DBSCAN **no troba
 estructura de grups múltiples** en aquestes dades; identifica un únic nucli dens i
 tracta la resta com a anomalies. Aquest és, en si mateix, el veredicte de qualitat:
 l'agrupament basat en densitat **no és l'eina adequada** per particionar aquesta
-cohort, però sí que aporta una lectura valuosa com a **detector d'outliers**.
+cohort.
 
 ### Es comparen els resultats obtinguts amb els models k-means i k-medians. Per exemple, analitzar si el nombre de grups coincideix i si les seves característiques són similars.
 
@@ -1020,14 +947,14 @@ els que faran servir els exercicis 6 i 7.
 
 ## Exercici 6 (20%)
 
-> **Nota metodològica.** A les PAC de l'assignatura es va treballar principalment amb
-> l'algorisme **C5.0**. En aquest exercici fem servir l'arbre **CART** (`rpart`) perquè
-> ofereix el control més **explícit sobre la poda** —el nucli d'aquest apartat, on cal
-> comparar l'arbre amb i sense poda mitjançant el paràmetre de complexitat (`cp`) i la
-> taula de validació creuada (`cptable`)—. Reservem el **C5.0**, el mètode vist a
-> classe, com a model principal de l'exercici 7, on també l'enfrontem a un *random
-> forest*. Tots dos són algorismes d'arbres de decisió; la comparació entre ells és,
-> precisament, l'objectiu de l'exercici 7.
+**Nota metodològica.** A les PAC de l'assignatura es va treballar principalment amb
+l'algorisme **C5.0**. En aquest exercici fem servir l'arbre **CART** (`rpart`) perquè
+ofereix el control més **explícit sobre la poda** —el nucli d'aquest apartat, on cal
+comparar l'arbre amb i sense poda mitjançant el paràmetre de complexitat (`cp`) i la
+taula de validació creuada (`cptable`)—. Reservem el **C5.0**, el mètode vist a
+classe, com a model principal de l'exercici 7, on també l'enfrontem a un *random
+forest*. Tots dos són algorismes d'arbres de decisió; la comparació entre ells és,
+precisament, l'objectiu de l'exercici 7.
 
 ### S’entrena l’arbre de decisió, es generen regles i se seleccionen i s’interpreten les més significatives.
 
@@ -1378,7 +1305,7 @@ grup ja observada a l'exercici 1—. Pel costat **supervisat**, l'ingrés a l'UC
 **convergència**: els quatre models supervisats identifiquen **les mateixes variables
 determinants** —tipus, durada i agressivitat de la cirurgia, departament i fragilitat
 preoperatòria del pacient (albúmina, urea, edat)—, cosa que indica que el senyal
-predictiu és **robust i real**. Tot plegat dibuixa un compromís nítid entre
+predictiu és **robust i real**. Tot plegat indica un compromís entre
 **precisió i interpretabilitat**: l'arbre de decisió ofereix regles llegibles i
 auditables a costa d'una mica de precisió, mentre que els *ensembles* maximitzen
 l'encert a costa de la transparència. La tria final hauria de dependre de l'**objectiu
@@ -1456,22 +1383,7 @@ propi.
    apresos a l'entrenament. La consulta em va ajudar a entendre **per què** uns models
    toleren els NA i altres no.
 
-#### Consulta 4 — Metodologia
-
-1. **Pregunta.** *"Per a un k-means amb variables clíniques de escales molt diferents,
-   he de normalitzar? I com decideixo el nombre de clústers?"*
-2. **Resposta obtinguda.** L'IA va recomanar **normalitzar (z-score)** per evitar que
-   les variables de magnitud gran (com el cristal·loide en mL) dominessin la distància
-   euclidiana, i triar *k* combinant el **mètode del colze** amb el **coeficient de
-   silueta**.
-3. **Decisió.** Vaig treballar amb les dades normalitzades (`Xs`) i vaig fixar **k = 2**
-   pel màxim clar de silueta.
-4. **Reflexió crítica.** La recomanació coincidia amb l'advertiment de l'enunciat, però
-   la vaig validar jo mateix: en comparar la silueta amb dades crues (artificialment
-   alta, 0,73) i normalitzades (0,37), vaig confirmar que la primera era enganyosa
-   perquè una sola variable dominava l'agrupament.
-
-#### Consulta 5 — Diagnosi
+#### Consulta 4 — Diagnosi
 
 1. **Pregunta.** *"El DBSCAN em retorna sempre un sol clúster i molt soroll, provi els
    valors de `eps` i `minPts` que provi. És un error meu?"*
@@ -1487,7 +1399,7 @@ propi.
    (coincidien en gran part). Em va ensenyar a no descartar un resultat "lleig" sense
    entendre'n la causa.
 
-#### Consulta 6 — Interpretació
+#### Consulta 5 — Interpretació
 
 1. **Pregunta.** *"Amb un 18 % de positius, el meu arbre té un 87 % d'accuracy. És bo?
    Quines mètriques he de mirar de debò?"*
@@ -1503,21 +1415,5 @@ propi.
    fals positiu— la vam desenvolupar de manera conjunta, i és la que va motivar el
    refinament sensible al cost. Aquí l'aportació pròpia de criteri va ser decisiva.
 
-#### Consulta 7 — Extensió
-
-1. **Pregunta.** *"Més enllà de l'arbre bàsic, què podria fer per millorar la detecció
-   d'ingressos i enriquir la comparació de models?"*
-2. **Resposta obtinguda.** L'IA va proposar diverses línies: introduir una **matriu de
-   pèrdua** per penalitzar els falsos negatius, provar mètodes d'***ensemble***
-   (*boosting* amb C5.0, *random forest*) per guanyar precisió, i afegir una
-   **visualització PCA** per il·lustrar el resultat de DBSCAN.
-3. **Decisió.** Vaig incorporar les tres idees: l'arbre sensible al cost (exercici 6),
-   el C5.0 amb *boosting* i el *random forest* (exercici 7) i el gràfic PCA del soroll
-   (exercici 4).
-4. **Reflexió crítica.** Aquestes propostes van ampliar l'abast de la pràctica més
-   enllà del mínim demanat. Les vaig valorar de manera crítica: el *random forest*
-   millora la precisió però sacrifica la interpretabilitat, de manera que no el
-   presento com a "guanyador" absolut sinó dins del compromís precisió–transparència
-   que vertebra les conclusions.
 
 ***
