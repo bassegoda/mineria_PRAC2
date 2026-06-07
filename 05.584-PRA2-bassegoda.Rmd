@@ -24,7 +24,8 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
 
 ```{r llibreries, include=FALSE}
 # Models no supervisats
-library(cluster)       # k-medians (pam/clara), silhouette
+library(cluster)       # PAM/clara (around medoids), silhouette
+library(flexclust)     # k-medians (kcca, centroides = mediana, Manhattan)
 library(factoextra)    # diagnòstics i visualització de clústers
 library(dbscan)        # DBSCAN i OPTICS
 # Models supervisats
@@ -403,7 +404,10 @@ Xs <- scale(X)                  # versió normalitzada (z-score)
 dim(X)
 vars_model
 ```
-
+Com veiem son 33 variables totes que tenen a veure amb paràmetres preoperatoris
+com l'edat o el bmi o analítiques preoperatòries; o bé amb paràmetres intra-
+operatoris. Això ens servirà més endavant per fer predicció sobre outcomes
+postoperatoris en els exercisis 5-7.
 ***
 
 ## Exercici 1 (20%)
@@ -419,17 +423,15 @@ dades **normalitzades**: el mètode del **colze** (suma de quadrats intra-clúst
 set.seed(42)
 g_wss <- fviz_nbclust(Xs, kmeans, method = "wss", k.max = 10) +
   labs(title = "Mètode del colze (dades normalitzades)")
-# La silueta té cost O(n²); l'estimem sobre una submostra de 1.500 casos
-set.seed(1); sub <- sample(nrow(Xs), 1500)
-g_sil <- fviz_nbclust(Xs[sub, ], kmeans, method = "silhouette", k.max = 8) +
-  labs(title = "Coeficient de silueta (submostra n=1.500)")
+g_sil <- fviz_nbclust(Xs, kmeans, method = "silhouette", k.max = 8) +
+  labs(title = "Coeficient de silueta (dades normalitzades)")
 gridExtra::grid.arrange(g_wss, g_sil, ncol = 2)
 ```
 
 La corba del colze descendeix de manera **suau**, sense un canvi de pendent
 nítid: és habitual en dades clíniques d'alta dimensió, on l'estructura és més un
 *gradient* que no pas grups esfèrics ben separats. El **coeficient de silueta**,
-en canvi, és concloent: assoleix el màxim a **k = 2** (≈ 0,60) i cau de cop a
+en canvi, és concloent: assoleix el màxim a **k = 2** (≈ 0,37) i cau de cop a
 k = 3 (≈ 0,19). Triem doncs **k = 2**.
 
 Ajustem ara *k-means* amb k = 2 sobre les **dues** versions de les dades per
@@ -443,12 +445,12 @@ km_std <- kmeans(Xs, centers = 2, nstart = 25, iter.max = 50)  # dades normalitz
 
 ### S'analitzen, mostren i comenten les mesures de qualitat del model generat.
 
-Comparem la qualitat dels dos models amb la silueta mitjana (sobre la mateixa
-submostra) i la proporció de variància explicada (`betweenss/totss`):
+Comparem la qualitat dels dos models amb la silueta mitjana (sobre tots els
+casos complets) i la proporció de variància explicada (`betweenss/totss`):
 
 ```{r ex1-qualitat}
-sil_raw <- mean(silhouette(kmeans(X[sub, ],  2, nstart = 25)$cluster, dist(X[sub, ]))[, 3])
-sil_std <- mean(silhouette(kmeans(Xs[sub, ], 2, nstart = 25)$cluster, dist(Xs[sub, ]))[, 3])
+sil_raw <- mean(silhouette(kmeans(X,  2, nstart = 25)$cluster, dist(X))[, 3])
+sil_std <- mean(silhouette(kmeans(Xs, 2, nstart = 25)$cluster, dist(Xs))[, 3])
 
 data.frame(
   Model               = c("Dades originals", "Dades normalitzades"),
@@ -460,8 +462,8 @@ data.frame(
 )
 ```
 
-Aparentment les **dades originals** donen una silueta més alta (≈ 0,72 enfront de
-≈ 0,60). Aquesta xifra, però, és **enganyosa**: en absència d'escala, la distància
+Aparentment les **dades originals** donen una silueta més alta (≈ 0,73 enfront de
+≈ 0,37). Aquesta xifra, però, és **enganyosa**: en absència d'escala, la distància
 euclidiana queda dominada per les variables de magnitud més gran —sobretot
 `intraop_crystalloid`, expressada en mil·lilitres (ordres de milers)— i per les
 variables de transfusió. L'agrupament resultant separa essencialment *volum de
@@ -479,7 +481,7 @@ fviz_cluster(km_std, data = Xs, geom = "point", alpha = 0.3,
 La projecció sobre les dues primeres components principals mostra un grup gran i
 compacte i un grup menor i més dispers. La variància explicada és baixa
 (`betweenss/totss` ≈ 0,07): k-means captura poca separació global, coherent amb
-una estructura de tipus gradient. Tot i així la silueta (0,60) i, sobretot, la
+una estructura de tipus gradient. Tot i així la silueta (0,37) i, sobretot, la
 **interpretabilitat clínica** dels grups (apartat següent) justifiquen la solució.
 
 ### S’interpreten els centres, la mida dels grups i la seva dispersió.
@@ -509,7 +511,7 @@ data.frame(
 
 **Interpretació dels grups:**
 
-- **Grup 1 (≈ 676 casos, 13 %) — pacients d'alt risc / comòrbids.** Presenten un
+- **Grup 1 (≈ 685 casos, 13 %) — pacients d'alt risc / comòrbids.** Presenten un
   *ASA* més alt (≈ 2,5), una proporció molt superior de **cirurgia urgent**
   (`emop` ≈ 0,39 enfront de 0,07) i d'**hipertensió**, una **hemoglobina**
   preoperatòria més baixa (≈ 10,6) i **albúmina** baixa (≈ 3,4) —signe de pitjor
@@ -517,7 +519,7 @@ data.frame(
   d'insuficiència renal). Intraoperatòriament reben molt més **cristal·loide**
   (≈ 2,4 L) i més transfusió. És el grup amb **major dispersió** (WSS per cas més
   alt), reflex de la seva heterogeneïtat clínica.
-- **Grup 2 (≈ 4.573 casos, 87 %) — pacients d'estàndard de risc.** *ASA* ≈ 1,75,
+- **Grup 2 (≈ 4.564 casos, 87 %) — pacients d'estàndard de risc.** *ASA* ≈ 1,75,
   poca cirurgia urgent, **analítica preoperatòria dins de la normalitat**
   (hemoglobina ≈ 13,2, albúmina ≈ 4,2, creatinina ≈ 0,8) i menor necessitat de
   fluïdoteràpia. És un grup gran, compacte i homogeni.
@@ -528,15 +530,133 @@ quirúrgic estàndard**. Aquesta agrupació servirà de referència per comparar
 amb *k-medians* (exercici 2), una mètrica no euclidiana (exercici 3) i els
 mètodes basats en densitat (exercici 4).
 
+> *Documentació dels paquets emprats: `kmeans` (paquet base `stats`) —
+> <https://stat.ethz.ch/R-manual/R-devel/library/stats/html/kmeans.html>;
+> `factoextra` (diagnòstic i visualització de clústers) —
+> <https://CRAN.R-project.org/package=factoextra>; `cluster` (coeficient de silueta) —
+> <https://CRAN.R-project.org/package=cluster>.*
+
 ***
 
 ## Exercici 2 (10%)
 
 ### S'obté l'agrupació k-medians amb el nombre de grups seleccionat a l'exercici 1 (de manera opcional, també es pot obtenir l’agrupament mitjançant el mètode *around medoids*).
 
+A diferència de *k-means* —que situa el centre de cada grup a la **mitjana** i mesura
+distàncies amb la mètrica **euclidiana** (L2)—, *k-medians* col·loca el centre a la
+**mediana** de cada variable i treballa amb la distància **Manhattan** (L1, suma de
+diferències absolutes). El canvi té una conseqüència directa: la mediana és
+**robusta als valors extrems**. Un grapat de pacients amb una creatinina molt
+elevada arrossega la *mitjana* del grup, però amb prou feines mou la *mediana*. Per
+això *k-medians* tendeix a definir centres més representatius del pacient "típic"
+de cada grup.
+
+Reaprofitem la mateixa matriu normalitzada `Xs` i el mateix nombre de grups
+**k = 2** fixat a l'exercici 1. Fem servir `flexclust::kcca` amb la família
+`kmedians`, que implementa l'algorisme amb centroides–mediana i distància Manhattan:
+
+```{r ex2-kmedians}
+set.seed(42)
+kmed <- kcca(Xs, k = 2, family = kccaFamily("kmedians"))
+grup_kmed <- clusters(kmed)
+
+# Qualitat: silueta mitjana amb la mètrica pròpia del mètode (Manhattan)
+sil_kmed <- mean(silhouette(grup_kmed, dist(Xs, method = "manhattan"))[, 3])
+round(sil_kmed, 3)
+```
+
+La silueta mitjana és **≈ 0,36** (mètrica Manhattan), pràcticament idèntica a la de
+*k-means* (≈ 0,37 amb mètrica euclidiana). Tot i que les xifres no són directament
+comparables —cada mètode usa la seva distància—, indiquen una **qualitat
+d'agrupament equivalent** i confirmen que k = 2 també és una elecció raonable aquí.
+
 ### Es comparen els resultats amb els obtinguts a l'exercici 1. Es recomana utilitzar, per exemple, algun tipus de taula de freqüències creuades.
 
+Encreuem l'assignació de *k-means* (exercici 1) amb la de *k-medians* en una **taula
+de freqüències creuades**. Com que en tots dos models el grup 1 és el d'alt risc,
+la diagonal mesura les coincidències:
+
+```{r ex2-crosstab}
+taula_creuada <- table(kmeans = km_std$cluster, kmedians = grup_kmed)
+taula_creuada
+concordanca <- sum(diag(taula_creuada)) / sum(taula_creuada)
+round(100 * concordanca, 1)
+```
+
+La **concordança és del 92,2 %**: els dos mètodes descriuen essencialment la
+**mateixa partició** (pacient complex vs. estàndard). La diferència es concentra en
+la frontera del grup d'alt risc, que *k-medians* dibuixa **més estret**: dels 685
+pacients que *k-means* hi col·locava, 272 passen al grup estàndard i només
+s'hi afegeixen 135 de nous, de manera que el nucli d'alt risc passa de **685 a 548**
+casos. És l'efecte esperat de la robustesa: en no deixar-se estirar pels casos
+extrems, *k-medians* reté només el **nucli més inequívocament d'alt risc** i envia a
+l'estàndard els pacients de perfil intermedi.
+
+**Opcionalment**, l'enunciat permet l'agrupament *around medoids*. El comprovem amb
+`cluster::pam` (medoides = pacients **reals** representatius, també amb Manhattan):
+
+```{r ex2-pam}
+set.seed(42)
+pm <- pam(Xs, k = 2, metric = "manhattan")
+table(kmeans = km_std$cluster, PAM = pm$clustering)
+round(pm$silinfo$avg.width, 3)
+```
+
+A diferència de *k-medians*, *PAM* produeix una partició **molt diferent** (mides
+≈ 1.924 / 3.325, silueta ≈ 0,07) que **no concorda** amb la de l'exercici 1. La raó
+és conceptual: *PAM* obliga el centre a ser un **pacient existent** del joc de
+dades, i en un espai de 33 dimensions amb una minoria d'alt risc de cua llarga, el
+medoide òptim recau sobre un eix de variació diferent i menys nítid. La conclusió és
+que, per a aquestes dades, el **k-medians de centroide–mediana és el mètode adequat**
+—reprodueix i reforça l'estructura de *k-means*— mentre que la variant *around
+medoids* no aporta una agrupació estable.
+
 ### S’interpreten els centres, la mida dels grups i la seva dispersió.
+
+Recuperem els centres del model *k-medians* en **escala original** (sobre les
+mateixes variables destacades de l'exercici 1) i la dispersió intra-grup que
+proporciona `flexclust` (distància Manhattan mitjana de cada cas a la seva mediana):
+
+```{r ex2-centres}
+centres_kmed <- aggregate(X, list(Grup = grup_kmed), mean)
+round(t(centres_kmed[, destacades]), 2)
+```
+
+```{r ex2-dispersio}
+data.frame(
+  Grup         = 1:2,
+  Mida         = kmed@clusinfo$size,
+  Percentatge  = round(100 * kmed@clusinfo$size / sum(kmed@clusinfo$size), 1),
+  Dist_mitjana = round(kmed@clusinfo$av_dist, 2),   # dispersió (Manhattan)
+  Separacio    = round(kmed@clusinfo$separation, 2)
+)
+```
+
+**Interpretació dels grups:**
+
+- **Grup 1 (548 casos, 10,4 %) — nucli d'alt risc.** Encara més marcat que a
+  l'exercici 1: *ASA* ≈ 2,59, una **proporció de cirurgia urgent del 61 %**
+  (`emop` ≈ 0,61, enfront del 0,39 de *k-means*), hemoglobina baixa (≈ 10,3),
+  albúmina baixa (≈ 3,2) i transfusió elevada (`intraop_rbc` ≈ 2,9). En ser un grup
+  més depurat, el perfil d'alt risc apareix **accentuat**.
+- **Grup 2 (4.701 casos, 89,6 %) — pacient estàndard.** Analítica dins de la
+  normalitat (Hb ≈ 13,1, albúmina ≈ 4,2, creatinina ≈ 1,0) i poca cirurgia urgent.
+
+La **dispersió** confirma el patró ja vist a l'exercici 1: el grup d'alt risc és
+gairebé **el doble de dispers** (distància mitjana ≈ 25,9 enfront de ≈ 13,9), reflex
+de la seva heterogeneïtat clínica.
+
+Un detall il·lustra de manera directa la **robustesa** del mètode: la creatinina
+mitjana del grup d'alt risc és **≈ 2,1** amb *k-medians*, força inferior al **≈ 2,9**
+de *k-means*. La mitjana de l'exercici 1 estava inflada per uns pocs pacients amb
+insuficiència renal greu; la mediana, en canvi, descriu el pacient d'alt risc
+**típic** sense l'arrossegament d'aquests valors extrems. En síntesi, *k-medians*
+**valida la partició de referència** i, a més, n'ofereix una caracterització més
+representativa del cas central de cada grup.
+
+> *Documentació dels paquets emprats: `flexclust` (`kcca`, família `kmedians`) —
+> <https://CRAN.R-project.org/package=flexclust>; `cluster` (`pam`, *around medoids*) —
+> <https://CRAN.R-project.org/package=cluster>.*
 
 ***
 
@@ -544,45 +664,539 @@ mètodes basats en densitat (exercici 4).
 
 ### S'obté l'agrupació mitjançant k-means (amb els grups seleccionats a l'exercici 1), però usant una mètrica de distància diferent.
 
+Els exercicis 1 i 2 mesuraven la proximitat entre pacients per la **magnitud** de
+les seves diferències (distàncies euclidiana i Manhattan). Aquí canviem la lent i
+fem servir la **distància del cosinus**, que mesura l'**angle** entre dos vectors de
+perfil de pacient. La diferència conceptual és important: el cosinus ignora la
+*intensitat global* i compara la **forma del perfil** —quines variables són
+relativament altes i quines baixes—. Dos pacients amb el mateix patró (per exemple,
+analítica proporcionalment alterada en les mateixes direccions) es consideren
+**propers encara que un sigui globalment més extrem que l'altre**.
+
+Apliquem un *k-means* amb aquesta mètrica mitjançant la família `angle` de
+`flexclust::kcca`, sobre la mateixa matriu normalitzada `Xs` i el mateix
+**k = 2**:
+
+```{r ex3-cosinus}
+set.seed(42)
+kcos <- kcca(Xs, k = 2, family = kccaFamily("angle"))
+grup_cos <- clusters(kcos)
+
+# Silueta amb distància cosinus (1 − similitud cosinus)
+U   <- Xs / sqrt(rowSums(Xs^2))            # files normalitzades a norma 1
+sim <- pmin(pmax(U %*% t(U), -1), 1)        # similitud cosinus, acotada a [−1, 1]
+sil_cos <- mean(silhouette(grup_cos, as.dist(1 - sim))[, 3])
+round(sil_cos, 3)
+```
+
+La silueta mitjana (mètrica cosinus) és **≈ 0,16**, clarament inferior al ≈ 0,36–0,37
+d'*k-means* i *k-medians*. La separació basada en la *forma* del perfil és, doncs,
+**més difusa**: respon més a un gradient continu que no pas a dos grups nets. Tot i
+així, com veurem, la partició és **clínicament interpretable** i, sobretot,
+**diferent** de les anteriors.
+
 ### Es comparen els resultats amb els obtinguts als exercicis 1 i 2. Es recomana utilitzar, per exemple, algun tipus de taula de freqüències creuades.
 
+```{r ex3-crosstab}
+table(ex1_kmeans   = km_std$cluster, cosinus = grup_cos)
+table(ex2_kmedians = grup_kmed,      cosinus = grup_cos)
+```
+
+A diferència de la comparació entre els exercicis 1 i 2 (concordança del 92 %), aquí
+les particions **no s'alineen**: el cosinus produeix dos grups gairebé **equilibrats**
+(≈ 2.405 / 2.844, és a dir 46 % / 54 %), enfront del 13 % / 87 % dels mètodes
+basats en magnitud. Per això una "concordança diagonal" no té sentit; el que cal
+llegir és l'**encaix** entre estructures:
+
+- El **97 %** dels pacients d'alt risc de l'exercici 1 (665 de 685) i el **90 %**
+  dels d'alt risc de l'exercici 2 (494 de 548) **cauen dins del grup 1 del cosinus**.
+  Els pacients aguts greus són, doncs, un **subconjunt** del grup que detecta el
+  cosinus.
+- Però el grup 1 del cosinus és **3,5 vegades més gran** (2.405 casos): a més del
+  nucli agut greu, hi absorbeix ≈ 1.740 pacients que els exercicis 1 i 2
+  classificaven com a "estàndard".
+
+És a dir, **canviar la mètrica canvia l'eix de tall**: euclidiana/Manhattan separen
+per **severitat quirúrgica aguda** (un grup petit i greu), mentre que el cosinus
+separa per un eix **diferent i més ampli** que examinem tot seguit.
+
 ### S’interpreten els centres, la mida dels grups i la seva dispersió.
+
+```{r ex3-centres}
+centres_cos <- aggregate(X, list(Grup = grup_cos), mean)
+round(t(centres_cos[, destacades]), 2)
+```
+
+```{r ex3-dispersio}
+data.frame(
+  Grup         = 1:2,
+  Mida         = kcos@clusinfo$size,
+  Percentatge  = round(100 * kcos@clusinfo$size / sum(kcos@clusinfo$size), 1),
+  Dist_mitjana = round(kcos@clusinfo$av_dist, 3),    # distància angular mitjana
+  Separacio    = round(kcos@clusinfo$separation, 3)
+)
+```
+
+**Interpretació dels grups:**
+
+- **Grup 1 (2.405 casos, 45,8 %) — pacient gran amb comorbiditat crònica.** El que
+  el defineix és l'**edat** (≈ 64,9 anys, enfront de ≈ 51,4), la **hipertensió**
+  (62 % vs. 6 %) i la **diabetis** (`preop_dm` ≈ 21 % vs. 2 %), amb un *ASA* moderat
+  (≈ 2,24) i creatinina lleugerament elevada (≈ 1,45).
+- **Grup 2 (2.844 casos, 54,2 %) — pacient jove metabòlicament sa.** Més jove,
+  pràcticament sense hipertensió ni diabetis i analítica preoperatòria normal.
+
+El contrast amb els exercicis anteriors és el punt clau: el cosinus **no organitza
+els pacients per la gravetat de l'episodi quirúrgic**, sinó per la seva **càrrega de
+comorbiditat crònica i edat**. Les variables de fase aguda (transfusió, cristal·loide)
+encara difereixen entre grups, però **deixen de ser l'eix dominant**.
+
+Pel que fa a la **dispersió**, el grup 1 (gran/comòrbid) és lleugerament més dispers
+(distància angular mitjana ≈ 0,736 enfront de ≈ 0,656), coherent amb el fet que la
+comorbiditat crònica és més heterogènia. Cal recordar que aquestes distàncies són
+**angulars** i no es poden comparar numèricament amb les unitats euclidianes
+(exercici 1) o Manhattan (exercici 2).
+
+En síntesi, **la mètrica determina què "veu" l'agrupament**. Les distàncies de
+magnitud (exercicis 1 i 2) aïllen un grup petit de pacients **aguts greus**; la
+distància del cosinus, en canvi, reorganitza la cohort segons el **perfil de risc
+crònic** i ofereix una partició complementària, encara que de separació més feble
+(silueta ≈ 0,16). Totes dues lectures són clínicament vàlides, però responen a
+**preguntes diferents** sobre el pacient.
+
+> *Documentació del paquet emprat: `flexclust` (`kcca` amb família `angle`, distància
+> del cosinus) — <https://CRAN.R-project.org/package=flexclust>.*
 
 ***
 ## Exercici 4 (10%)
 
-### S’aplica correctament els algorisme DBSCAN i OPTICS.
+### S’aplica els algorisme DBSCAN i OPTICS.
+
+A diferència de *k-means*, *k-medians* i el cosinus —que **parteixen sempre** la
+cohort en un nombre de grups fixat per endavant—, *DBSCAN* i *OPTICS* es basen en la
+**densitat**: agrupen les zones on els punts s'amunteguen i deixen com a **soroll**
+(*outliers*) els punts aïllats. Tenen dos avantatges conceptuals: **no cal fixar el
+nombre de grups** i poden detectar formes arbitràries. Depenen de dos paràmetres:
+
+- **`minPts`**: nombre mínim de veïns per considerar una zona "densa". Una regla
+  habitual és `minPts ≈ 2·dimensions`; amb 33 variables usem **`minPts = 34`**
+  (≈ dimensions + 1, el valor més permissiu raonable).
+- **`eps`**: el radi de veïnatge. El triem amb el **gràfic de distàncies al k-èsim
+  veí** (`kNNdistplot`): el "colze" de la corba marca la distància a partir de la
+  qual els punts deixen de tenir veïns propers.
+
+```{r ex4-knn, fig.width=7, fig.height=4}
+kNNdistplot(Xs, k = 34)
+abline(h = 4, col = "red", lty = 2)   # eps escollit al colze
+title("Distància al 34è veí (ordenada) — elecció d'eps")
+```
+
+El colze se situa al voltant de **`eps = 4`**. Ajustem *DBSCAN* amb aquests valors i,
+en paral·lel, *OPTICS* (que no fixa `eps` sinó que ordena tots els punts per
+densitat i en permet extreure després l'agrupament):
+
+```{r ex4-dbscan-optics}
+db <- dbscan(Xs, eps = 4, minPts = 34)
+oo <- optics(Xs, minPts = 34)
+xd <- extractDBSCAN(oo, eps_cl = 4)   # extracció DBSCAN a partir de l'ordre OPTICS
+
+c(DBSCAN_clusters = length(setdiff(unique(db$cluster), 0)),
+  DBSCAN_soroll_pct = round(100 * mean(db$cluster == 0), 1),
+  OPTICS_clusters = length(setdiff(unique(xd$cluster), 0)),
+  OPTICS_soroll_pct = round(100 * mean(xd$cluster == 0), 1))
+```
+
+Tots dos coincideixen: **un únic clúster dens** (4.392 casos) i un **16,3 % de
+soroll**. El gràfic de *reachability* d'OPTICS ho il·lustra: una sola gran "vall" de
+densitat (el clúster) amb nombrosos pics alts (els punts dispersos marcats com a
+soroll):
+
+```{r ex4-reachability, fig.width=8, fig.height=4}
+plot(oo, main = "Diagrama de reachability (OPTICS)")
+```
+
+Per fer-ho més intuïtiu, projectem els pacients sobre les **dues primeres components
+principals** (la mateixa projecció PCA de l'exercici 1) i els acolorim segons si
+DBSCAN els assigna al clúster dens o al soroll:
+
+```{r ex4-pca-plot, fig.width=7, fig.height=5}
+pca    <- prcomp(Xs)
+var_pc <- round(100 * (pca$sdev^2)[1:2] / sum(pca$sdev^2), 1)
+df_pca <- data.frame(
+  PC1  = pca$x[, 1], PC2 = pca$x[, 2],
+  Grup = factor(ifelse(db$cluster == 0, "Soroll (atípic)", "Clúster dens"),
+                levels = c("Clúster dens", "Soroll (atípic)"))
+)
+ggplot(df_pca, aes(PC1, PC2, color = Grup)) +
+  geom_point(size = 0.7, alpha = 0.5) +
+  scale_color_manual(values = c("Clúster dens"    = "#2c7fb8",
+                                "Soroll (atípic)" = "#d95f02")) +
+  labs(title = "DBSCAN (eps = 4, minPts = 34) sobre la projecció PCA",
+       x = paste0("PC1 (", var_pc[1], "%)"),
+       y = paste0("PC2 (", var_pc[2], "%)")) +
+  theme_minimal()
+```
+
+La imatge resumeix tota la lògica de l'exercici: el **clúster dens** (blau) és un nucli
+**compacte** al voltant de l'origen, mentre que el **soroll** (taronja) s'escampa per
+la **perifèria**. Els punts atípics no formen cap zona densa pròpia; són casos
+aïllats i dispersos —exactament el grup d'alt risc que, a l'exercici 1, ja presentava
+el doble de dispersió—.
 
 ### S’analitzen, es descriuen i s’interpreten els resultats obtinguts amb diferents valors d'`eps` i `minPts`.
 
+Com que el resultat de DBSCAN és molt sensible als paràmetres, fem un **escombrat**
+de `eps` × `minPts` i en reportem el nombre de clústers i el percentatge de soroll:
+
+```{r ex4-escombrat}
+escombrat <- expand.grid(minPts = c(34, 66), eps = c(3, 4, 5, 6, 7))
+escombrat <- cbind(escombrat, t(mapply(function(mp, e) {
+  cl <- dbscan(Xs, eps = e, minPts = mp)$cluster
+  c(clusters = length(setdiff(unique(cl), 0)), soroll_pct = round(100 * mean(cl == 0), 1))
+}, escombrat$minPts, escombrat$eps)))
+escombrat
+```
+
+El patró és inequívoc i **robust a la dimensionalitat**: cap combinació no recupera
+una partició de **dos grups equilibrats** com la de *k-means*. Amb `eps` petit, una
+part important dels punts queda com a soroll i tot just apareix algun microclúster
+residual; en augmentar `eps`, els grups es **fonen en un de sol** i el soroll
+disminueix. En 33 dimensions, la densitat és massa uniforme perquè un únic radi
+global separi subpoblacions: és la **maledicció de la dimensionalitat**.
+
 ### S'obté una mesura de com és de bo l'agrupament.
+
+El coeficient de **silueta no és aplicable** aquí en sentit estricte: requereix com a
+mínim dos clústers i, a la solució retinguda, DBSCAN només en forma un. La mesura de
+qualitat natural en aquest cas és la **proporció de soroll** (16,3 %) juntament amb
+el **nombre de clústers** (1). La lectura conjunta és clara: DBSCAN **no troba una
+estructura de grups múltiples** en aquestes dades; identifica un únic nucli dens i
+tracta la resta com a anomalies. Aquest és, en si mateix, el veredicte de qualitat:
+l'agrupament basat en densitat **no és l'eina adequada** per particionar aquesta
+cohort, però sí que aporta una lectura valuosa com a **detector d'outliers**.
 
 ### Es comparen els resultats obtinguts amb els models k-means i k-medians. Per exemple, analitzar si el nombre de grups coincideix i si les seves característiques són similars.
 
-### Es descriuen els grups en funció de les mitjanes de les variables utilitzades en l’algorisme.
+```{r ex4-crosstab}
+table(ex1_kmeans   = km_std$cluster, DBSCAN = db$cluster)   # 0 = soroll
+table(ex2_kmedians = grup_kmed,      DBSCAN = db$cluster)
+```
 
+El **nombre de grups no coincideix** (1 + soroll, enfront dels 2 d'ex 1–2), però la
+relació és molt reveladora. El soroll de DBSCAN **no és aleatori**: es concentra
+aclaparadorament en el grup d'**alt risc**. Concretament, el **87,6 %** dels pacients
+d'alt risc de l'exercici 1 (600 de 685) queden marcats com a soroll, davant de només
+el **5,6 %** dels pacients estàndard. El clúster dens únic de DBSCAN és, en essència,
+**el mateix grup estàndard** que aïllaven *k-means* i *k-medians*.
+
+La interpretació connecta directament amb una troballa de l'exercici 1: el grup
+d'alt risc tenia **el doble de dispersió** intra-grup. Un grup molt dispers **no és,
+per definició, una regió densa**; per això DBSCAN no el reconeix com a clúster, sinó
+que el descompon en *outliers*. Dit d'una altra manera: el que per a *k-means* és
+"el grup de pacients complexos", per a DBSCAN és "el conjunt de pacients atípics".
+Són dues lectures coherents del mateix fenomen.
+
+### Descrivim els grups en funció de les mitjanes de les variables utilitzades en l’algorisme.
+
+Comparem el perfil mitjà (en escala original) del **clúster dens** i del **soroll**:
+
+```{r ex4-perfils}
+grup_db <- factor(ifelse(db$cluster == 0, "Soroll", "Clúster dens"),
+                  levels = c("Clúster dens", "Soroll"))
+destacades_db <- c("age", "asa", "emop", "preop_htn", "preop_hb", "preop_alb",
+                   "preop_cr", "intraop_rbc", "intraop_crystalloid")
+round(t(aggregate(X[destacades_db], list(Grup = grup_db), mean)[, -1]), 2)
+```
+
+- **Clúster dens (4.392 casos) — pacient estàndard.** *ASA* ≈ 1,74, poca cirurgia
+  urgent (`emop` ≈ 0,06), analítica normal (Hb ≈ 13,1, albúmina ≈ 4,2,
+  creatinina ≈ 0,8) i poca transfusió. És el nucli homogeni i compacte de la cohort.
+- **Soroll (857 casos) — pacient atípic / d'alt risc.** *ASA* ≈ 2,40, molta més
+  cirurgia urgent (`emop` ≈ 0,36), anèmia (Hb ≈ 11,4), hipoalbuminèmia (≈ 3,6),
+  **creatinina elevada** (≈ 2,5) i transfusió alta (`intraop_rbc` ≈ 2,9). Coincideix
+  amb el perfil d'alt risc dels exercicis 1–3, ara reinterpretat com a **anomalia**.
+
+En conclusió, *DBSCAN* i *OPTICS* **no reprodueixen** la partició de dos grups dels
+mètodes anteriors —i no haurien de fer-ho, atesa la dimensionalitat i la dispersió
+del grup minoritari—, però **confirmen indirectament** la seva troballa principal:
+existeix un nucli gran i homogeni de pacients estàndard, del qual es desmarca un
+conjunt reduït i heterogeni de pacients d'alt risc que els mètodes de densitat
+classifiquen, amb lògica, com a **outliers**.
+
+> *Documentació del paquet emprat: `dbscan` (`dbscan`, `optics`, `kNNdistplot`,
+> `extractDBSCAN`) — <https://CRAN.R-project.org/package=dbscan>.*
 
 ***
 
 ## Exercici 5 (5%)
 
+Comença la part **supervisada** (exercicis 5–7). La variable a predir és
+**`icu_admission`** (ingrés a l'UCI, *No/Sí*), un desenllaç clínicament rellevant i
+amb un desequilibri moderat (**18,1 % de positius**). Es va descartar `death_inhosp` (només 0,8 %
+positius, massa desequilibrat).
+
 ### Es seleccionen les mostres d'entrenament i test.
 
+**Conjunt de predictors.** A diferència dels models de clustering —que exigien
+variables quantitatives o binàries i casos complets—, els **arbres de decisió**
+(exercicis 6–7) admeten **variables categòriques** de forma nativa i **gestionen els
+valors absents** mitjançant divisions *substitutes* (*surrogate splits*). Això ens
+permet un conjunt de predictors **més ric** i conservar **totes les 5.926 files**.
+Seleccionem variables conegudes **abans de la decisió d'ingrés a l'UCI** (final de la
+cirurgia): demografia, comorbiditats, analítica preoperatòria, curs intraoperatori i
+durada de la intervenció. **Excloem explícitament les fuites d'informació**
+(*data leakage*): `icu_days`, `los_hosp_days` i `death_inhosp` són conseqüència o
+posteriors a l'ingrés, i identificadors, marques de temps i variables de text lliure
+d'alta cardinalitat (`dx`, `opname`) o amb >20 % d'absents (gasometries, `tubesize`)
+no s'inclouen.
+
+```{r ex5-prep}
+num_pred <- c("age","height","weight","bmi","asa",
+  "preop_hb","preop_plt","preop_pt","preop_aptt","preop_na","preop_k","preop_gluc",
+  "preop_alb","preop_ast","preop_alt","preop_bun","preop_cr",
+  "intraop_rbc","intraop_ffp","intraop_crystalloid","intraop_colloid","intraop_ppf",
+  "intraop_mdz","intraop_ftn","intraop_rocu","intraop_vecu","intraop_eph","intraop_phe",
+  "intraop_epi","intraop_ca","op_duration_min","ane_duration_min")
+cat_pred <- c("sex","emop","department","optype","approach","ane_type","position",
+  "preop_htn","preop_dm","preop_pft")
+
+# Rellegim el CSV original: el `dades` de l'ex1 té emop/preop_htn/preop_dm recodificats
+# a 0/1; aquí els volem com a factors No/Sí per a regles d'arbre més llegibles.
+dades_sup <- read.csv("clinical_clean.csv", stringsAsFactors = FALSE)
+sup <- dades_sup[, c(num_pred, cat_pred, "icu_admission")]
+sup$icu_admission <- factor(sup$icu_admission, levels = c("No", "Sí"))
+for (c in cat_pred) sup[[c]] <- factor(sup[[c]])
+
+dim(sup)                                   # 5.926 casos × 43 variables (42 predictors)
+round(prop.table(table(sup$icu_admission)) * 100, 1)   # balanç global del target
+```
+
+**Partició estratificada.** Fem la divisió amb `caret::createDataPartition`, que
+mostreja de manera **estratificada** per `icu_admission`: així la proporció de
+positius (18,1 %) es manté **idèntica** a entrenament i test, condició important quan
+la classe d'interès és minoritària.
+
+```{r ex5-split}
+set.seed(42)
+idx   <- createDataPartition(sup$icu_admission, p = 0.8, list = FALSE)
+train <- sup[idx, ]
+test  <- sup[-idx, ]
+
+rbind(
+  Entrenament = c(n = nrow(train), table(train$icu_admission),
+                  pct_Si = round(100 * mean(train$icu_admission == "Sí"), 1)),
+  Test        = c(n = nrow(test),  table(test$icu_admission),
+                  pct_Si = round(100 * mean(test$icu_admission == "Sí"), 1))
+)
+```
+
+La partició resultant és de **4.742 casos d'entrenament** i **1.184 de test**, amb un
+**18,1 % de positius a tots dos** conjunts (859 i 214 ingressos a l'UCI,
+respectivament).
+
 ### Es justifiquen les proporcions seleccionades.
+
+Hem triat una proporció **80 % / 20 %** per dues raons:
+
+- **Mida del conjunt d'entrenament.** Un arbre de decisió amb poda (exercici 6) i un
+  segon model supervisat (exercici 7) es beneficien de **com més dades millor** per
+  estimar bé les divisions; el 80 % (4.742 casos) ofereix un entrenament ampli.
+- **Fiabilitat del test.** Amb un conjunt de dades de mida moderada (≈ 5.900 casos),
+  el 20 % de test (1.184 casos) encara conté **214 ingressos a l'UCI**, una xifra
+  **suficient** per estimar amb precisió raonable mètriques sensibles a la classe
+  minoritària com la **sensibilitat** (recall). Una proporció més agressiva (p. ex.
+  90/10) deixaria només ≈ 107 positius al test, amb estimacions més inestables.
+
+L'**estratificació** garanteix, a més, que el test sigui representatiu de la
+prevalença real d'ingrés a l'UCI, de manera que les mètriques de l'exercici 6 no
+quedin esbiaixades per un atzar de mostreig. Aquests conjunts `train` i `test` són
+els que faran servir els exercicis 6 i 7.
+
+> *Documentació del paquet emprat: `caret` (`createDataPartition`, partició
+> estratificada) — <https://CRAN.R-project.org/package=caret>; guia d'usuari:
+> <https://topepo.github.io/caret/>.*
 
 ***
 
 ## Exercici 6 (20%)
 
+> **Nota metodològica.** A les PAC de l'assignatura es va treballar principalment amb
+> l'algorisme **C5.0**. En aquest exercici fem servir l'arbre **CART** (`rpart`) perquè
+> ofereix el control més **explícit sobre la poda** —el nucli d'aquest apartat, on cal
+> comparar l'arbre amb i sense poda mitjançant el paràmetre de complexitat (`cp`) i la
+> taula de validació creuada (`cptable`)—. Reservem el **C5.0**, el mètode vist a
+> classe, com a model principal de l'exercici 7, on també l'enfrontem a un *random
+> forest*. Tots dos són algorismes d'arbres de decisió; la comparació entre ells és,
+> precisament, l'objectiu de l'exercici 7.
+
 ### S’entrena l’arbre de decisió, es generen regles i se seleccionen i s’interpreten les més significatives.
+
+Un **arbre de decisió** (CART, *Classification And Regression Tree*) classifica
+fent una sèrie de **preguntes binàries** encadenades sobre les variables. A cada pas,
+l'algorisme tria la pregunta (per exemple, *"la durada de la cirurgia és ≥ 289 min?"*)
+que millor **separa** els pacients que ingressen a l'UCI dels que no. La mesura de
+"bona separació" és la **impuresa de Gini**: un node és pur si tots els seus pacients
+són de la mateixa classe. L'arbre creix dividint recursivament fins que els nodes són
+prou purs o prou petits, i cada **fulla** final assigna una probabilitat d'ingrés.
+
+Ajustem el creixement amb tres paràmetres (`rpart.control`):
+
+- **`minsplit`** (20): nombre mínim de casos en un node per intentar dividir-lo.
+- **`minbucket`** (7): nombre mínim de casos en una fulla.
+- **`cp`** (*complexity parameter*): millora mínima que ha d'aportar una divisió per
+  acceptar-la. El fixem a **`cp = 0`** per fer créixer un **arbre màxim** (sense
+  restricció), que després **podarem**.
+
+```{r ex6-arbre}
+set.seed(42)
+arbre_full <- rpart(icu_admission ~ ., data = train, method = "class",
+                    control = rpart.control(cp = 0, minsplit = 20,
+                                            minbucket = 7, xval = 10))
+sum(arbre_full$frame$var == "<leaf>")   # nombre de fulles de l'arbre sense podar
+```
+
+L'arbre sense podar té **96 fulles**: és massa complex, memoritza el soroll del
+conjunt d'entrenament (*overfitting*) i és impossible d'interpretar. La **poda** busca
+l'arbre més petit l'error del qual, estimat per **validació creuada** (`xerror` de la
+taula de complexitat), sigui estadísticament equivalent al mínim. Apliquem la
+**regla 1-SE** (el menor arbre amb `xerror` dins d'una desviació estàndard del
+mínim):
+
+```{r ex6-poda, fig.width=7, fig.height=4}
+plotcp(arbre_full)
+
+cp_tab  <- arbre_full$cptable
+imin    <- which.min(cp_tab[, "xerror"])
+llindar <- cp_tab[imin, "xerror"] + cp_tab[imin, "xstd"]      # mínim + 1 SE
+cp_1se  <- cp_tab[which(cp_tab[, "xerror"] <= llindar)[1], "CP"]
+arbre_poda <- prune(arbre_full, cp = cp_1se)
+c(cp_escollit = round(cp_1se, 5),
+  fulles = sum(arbre_poda$frame$var == "<leaf>"))
+```
+
+La poda redueix l'arbre de **96 a 13 fulles**: un model molt més simple i, com veurem,
+millor generalitzador. Les variables **més determinants** (importància de Gini) són
+el **tipus de cirurgia** (`optype`), el **departament**, la **durada** de la
+intervenció i l'anestèsia, la **posició** quirúrgica i l'**albúmina** preoperatòria:
+
+```{r ex6-importancia}
+round(sort(arbre_poda$variable.importance, decreasing = TRUE)[1:8])
+```
 
 ### S'extreuen les regles del model en format text i gràfic.
 
+Cada camí de l'arrel a una fulla és una **regla**. En format **gràfic**:
+
+```{r ex6-plot, fig.width=11, fig.height=7}
+rpart.plot(arbre_poda, type = 2, extra = 106, under = TRUE,
+           box.palette = "RdYlGn", tweak = 1.1, fallen.leaves = TRUE,
+           main = "Arbre de decisió podat — predicció d'ingrés a l'UCI")
+```
+
+Cada node mostra la **probabilitat d'ingrés a l'UCI** i el **percentatge de casos**
+que hi arriben. I en format **text** (probabilitat i cobertura de cada regla):
+
+```{r ex6-regles}
+rpart.rules(arbre_poda, roundint = FALSE, cover = TRUE, nn = FALSE, style = "tall")
+```
+
 ### Addicionalment, es genera la matriu de confusió per mesurar la capacitat predictiva de l'algorisme, tenint en compte les diferents mètriques associades a aquesta matriu (precisió, sensibilitat, especificitat...). Alternativament, si la variable objecte destudi és quantitativa pura sobtenen els criteris d'error que ens permetin determinar la capacitat predictiva.
+
+Avaluem tots dos arbres sobre el **conjunt de test** (mai vist a l'entrenament). La
+classe positiva és l'ingrés a l'UCI (`Sí`):
+
+```{r ex6-confusio}
+cm_full <- confusionMatrix(predict(arbre_full, test, type = "class"),
+                           test$icu_admission, positive = "Sí")
+cm_poda <- confusionMatrix(predict(arbre_poda, test, type = "class"),
+                           test$icu_admission, positive = "Sí")
+
+cm_poda$table   # matriu de confusió de l'arbre podat
+
+metr <- function(cm) round(c(
+  Accuracy    = cm$overall["Accuracy"],
+  Sensibilitat= cm$byClass["Sensitivity"],
+  Especificitat = cm$byClass["Specificity"],
+  Precisio    = cm$byClass["Pos Pred Value"],
+  F1          = cm$byClass["F1"],
+  Kappa       = cm$overall["Kappa"]), 3)
+comparativa <- rbind(`Sense poda (96 fulles)` = metr(cm_full),
+                     `Amb poda (13 fulles)`   = metr(cm_poda))
+colnames(comparativa) <- c("Accuracy","Sensibilitat","Especificitat",
+                           "Precisió","F1","Kappa")
+comparativa
+```
+
+Interpretació de la matriu de l'arbre podat (test, 1.184 casos): de **214 ingressos
+reals**, l'arbre n'encerta **117** (sensibilitat 0,55) i en falla 97; dels **970 no
+ingressos**, n'encerta 915 (especificitat 0,94). La **precisió** (quan diu "UCI",
+quants cops encerta) és del **68 %**. L'**accuracy** global és del **87 %**, però amb
+classes desequilibrades aquesta xifra enganya (predir sempre "No" ja donaria 82 %);
+per això mirem també la **kappa** (0,53, concordança moderada per damunt de l'atzar)
+i el balanç sensibilitat/especificitat.
 
 ### Es comparen i interpreten els resultats sense i amb opcions de poda.
 
+La comparativa és el resultat clau de l'exercici. L'arbre **sense podar** (96 fulles)
+no només és inintel·ligible, sinó que **generalitza pitjor**: tot i ajustar gairebé
+perfectament l'entrenament, en test té **menys accuracy (0,859 vs 0,872)**, **menys
+precisió (0,61 vs 0,68)** i **menys kappa (0,52 vs 0,53)** que el podat. És la
+signatura de l'**overfitting**: les 83 fulles addicionals capturen particularitats
+del conjunt d'entrenament que no es repeteixen en dades noves. L'arbre **podat**
+sacrifica una mica de sensibilitat (0,55 vs 0,60 —detecta uns quants ingressos menys—)
+a canvi de ser **molt més simple, robust i interpretable**, amb una capacitat
+predictiva global igual o superior (F1 pràcticament idèntic, 0,606). La poda és, per
+tant, clarament **avantatjosa**.
+
+**Refinament sensible al cost.** Clínicament, un **fals negatiu** (no anticipar un
+ingrés a l'UCI) és més greu que un fals positiu. Podem incorporar-ho amb una **matriu
+de pèrdua** que penalitzi més els falsos negatius, desplaçant l'arbre cap a una
+**sensibilitat més alta**:
+
+```{r ex6-cost}
+set.seed(42)
+arbre_cost <- rpart(icu_admission ~ ., data = train, method = "class",
+                    parms = list(loss = matrix(c(0, 3, 1, 0), nrow = 2)),
+                    control = rpart.control(cp = 0.005))
+cm_cost <- confusionMatrix(predict(arbre_cost, test, type = "class"),
+                           test$icu_admission, positive = "Sí")
+metr(cm_cost)
+```
+
+Penalitzant els falsos negatius 3:1, la **sensibilitat puja a ≈ 0,76** (detecta tres
+de cada quatre ingressos) a canvi de més falsos positius (especificitat ≈ 0,85). La
+tria entre l'arbre podat estàndard i el sensible al cost depèn de l'objectiu clínic:
+**cribratge** (prioritzar detectar tots els casos) o **precisió** (minimitzar
+falses alarmes).
+
 ### Es descriuen les regles obtingudes.
+
+Les regles són **clínicament coherents** i s'organitzen al voltant de tres eixos: el
+**tipus i la durada** de la cirurgia, el **departament** i la **fragilitat**
+preoperatòria del pacient. Les més significatives:
+
+- **Risc molt baix (≈ 5 %, cobreix el 57 % dels casos).** Cirurgies de menor
+  complexitat (`optype` de tiroide, mama, colorectal, biliar/pàncrees…) amb **durada
+  < 289 min**. És la regla dominant: la majoria de pacients estàndard.
+- **Risc molt alt (≈ 83 %).** Cirurgia major (resecció/trasplantament/vascular) amb
+  **anestèsia curta** però pacient **fràgil**: albúmina baixa (< 3,2) i **urea
+  elevada** (`preop_bun` ≥ 18) —signe de mal estat nutricional i renal—.
+- **Risc alt (≈ 72 %).** Cirurgia major i llarga al **departament de cirurgia
+  toràcica** en pacients ≥ 57 anys: la cirurgia toràcica major és, per si mateixa, un
+  predictor potent d'ingrés a l'UCI.
+- **Risc alt (≈ 64 %).** Cirurgia de complexitat intermèdia però **llarga (≥ 289 min)
+  i per via oberta** (no robòtica ni laparoscòpica): la durada i l'abordatge obert
+  marquen l'agressivitat real de la intervenció.
+
+En síntesi, l'arbre aprèn que **l'ingrés a l'UCI ve determinat sobretot pel tipus,
+la durada i l'agressivitat de la cirurgia, modulats per la fragilitat preoperatòria
+del pacient** (albúmina, urea, edat) —una lògica que coincideix amb el criteri clínic
+real—.
+
+> *Documentació dels paquets emprats: `rpart` (arbres de decisió CART) —
+> <https://CRAN.R-project.org/package=rpart>; `rpart.plot` (visualització i extracció
+> de regles) — <https://CRAN.R-project.org/package=rpart.plot>; `caret` (matriu de
+> confusió i mètriques) — <https://CRAN.R-project.org/package=caret>.*
 
 ***
 
@@ -590,9 +1204,108 @@ mètodes basats en densitat (exercici 4).
 
 ### Es prova amb un altre tipus d’arbre de decisió (per exemple, un criteri de partició diferent) o amb un altre tipus d’algorisme supervisat.
 
+Provem **dos** models supervisats alternatius a l'arbre CART de l'exercici 6, que
+exploren dues direccions diferents:
+
+1. **C5.0** — un altre algorisme d'arbres de decisió que fa servir un **criteri de
+   partició diferent**: en lloc de la impuresa de Gini, divideix maximitzant el
+   **guany d'informació** (entropia). A més, permet *boosting* (combinar molts
+   arbres seqüencials).
+2. **Random Forest** — un **algorisme d'una família diferent** (*ensemble*): en lloc
+   d'un sol arbre, combina centenars d'arbres construïts sobre mostres aleatòries de
+   dades i variables, i vota. Sol ser molt més precís, a canvi de perdre
+   interpretabilitat.
+
+**C5.0.** L'algorisme C5.0 té un detall tècnic: la seva implementació en C no tradueix
+bé els nivells de factor amb accents. Per evitar-ho, fem una còpia on el nivell `Sí`
+es reanomena a `Si` (ASCII), només per a aquest model:
+
+```{r ex7-c50}
+ascii <- function(df) {
+  for (col in c("icu_admission", "emop", "preop_htn", "preop_dm")) {
+    l <- levels(df[[col]]); l[l == "Sí"] <- "Si"; levels(df[[col]]) <- l
+  }
+  df
+}
+train_c <- ascii(train); test_c <- ascii(test)
+
+set.seed(42)
+c5  <- C5.0(icu_admission ~ ., data = train_c)                # arbre C5.0
+c5b <- C5.0(icu_admission ~ ., data = train_c, trials = 10)   # amb boosting (10 arbres)
+c5$size                                                       # nombre de fulles
+```
+
+**Random Forest.** A diferència dels arbres `rpart`/C5.0, `randomForest` **no gestiona
+els valors absents**; els hem d'**imputar** abans (per mediana/moda, amb
+`na.roughfix`). Construïm un bosc de 500 arbres:
+
+```{r ex7-rf, fig.width=8, fig.height=5}
+train_i <- na.roughfix(train); test_i <- na.roughfix(test)
+set.seed(42)
+rf <- randomForest(icu_admission ~ ., data = train_i, ntree = 500, importance = TRUE)
+rf$err.rate[500, "OOB"]            # error *out-of-bag* (validació interna del bosc)
+varImpPlot(rf, type = 2, n.var = 10, main = "Random Forest — importància de variables")
+```
+
 ### Es detalla, comenta i avalua la qualitat de classificació o de l'ajust.
 
+Avaluem tots dos models (i les seves variants) sobre el mateix conjunt de **test**:
+
+```{r ex7-avaluacio}
+metr <- function(pred, real, pos) {
+  cm <- confusionMatrix(pred, real, positive = pos)
+  round(c(Accuracy = cm$overall["Accuracy"], Sensibilitat = cm$byClass["Sensitivity"],
+          Especificitat = cm$byClass["Specificity"], Precisió = cm$byClass["Pos Pred Value"],
+          F1 = cm$byClass["F1"], Kappa = cm$overall["Kappa"]), 3)
+}
+res_ex7 <- rbind(
+  `C5.0 (arbre)`        = metr(predict(c5,  test_c), test_c$icu_admission, "Si"),
+  `C5.0 (boosting x10)` = metr(predict(c5b, test_c), test_c$icu_admission, "Si"),
+  `Random Forest (500)` = metr(predict(rf,  test_i), test_i$icu_admission, "Sí")
+)
+colnames(res_ex7) <- c("Accuracy","Sensibilitat","Especificitat","Precisió","F1","Kappa")
+res_ex7
+```
+
+El **C5.0** (arbre individual) ja millora lleugerament l'arbre de l'exercici 6 en
+sensibilitat (0,60 vs 0,55) i kappa (0,55 vs 0,53), tot mantenint l'accuracy (0,87).
+El **boosting** fa un salt clar (accuracy 0,89, F1 0,67), i el **Random Forest** és el
+millor de tots: **accuracy 0,91, precisió 0,81, F1 0,70 i kappa 0,65**, amb un error
+*out-of-bag* de només l'11 %. El bosc identifica, a més, **les mateixes variables
+clau** que l'arbre CART (tipus de cirurgia, durades, departament, edat), cosa que
+**reforça la validesa** de la història clínica trobada a l'exercici 6.
+
 ### Es comparen els resultats amb el mètode supervisat de l'exercici 6.
+
+```{r ex7-comparativa}
+arbre6 <- metr(predict(arbre_poda, test, type = "class"), test$icu_admission, "Sí")
+rbind(`Ex6: arbre CART podat` = arbre6, res_ex7)
+```
+
+La comparativa global il·lustra el **compromís fonamental entre capacitat predictiva
+i interpretabilitat**:
+
+- **Arbre CART podat (ex 6)** — el **menys precís** (kappa 0,53), però el **més
+  interpretable**: 13 regles llegibles que un clínic pot validar i aplicar a mà.
+- **C5.0** — encara és un arbre (interpretable, tot i ser més gran), amb un criteri
+  d'entropia que aquí captura una mica millor la classe minoritària.
+- **C5.0 amb boosting i Random Forest** — els **més precisos** (kappa 0,61 i 0,65),
+  però **caixes negres**: són desenes o centenars d'arbres combinats i ja no es poden
+  llegir com un conjunt de regles; només n'obtenim la *importància de variables*.
+
+La tria del model depèn, doncs, de l'objectiu. Si calgués una eina **explicable** per
+donar suport a la decisió clínica a peu de llit, l'**arbre podat** és preferible
+malgrat la seva precisió més modesta. Si l'objectiu fos **maximitzar l'encert**
+predictiu (per exemple, per a una alerta automàtica de risc), el **Random Forest**
+seria la millor opció. En tots els casos, la **coincidència de les variables més
+importants** entre tots els models confirma que el senyal predictiu (tipus, durada i
+agressivitat de la cirurgia, més la fragilitat del pacient) és **robust i real**, no
+un artefacte d'un algorisme concret.
+
+> *Documentació dels paquets emprats: `C50` (arbres C5.0 i *boosting*) —
+> <https://CRAN.R-project.org/package=C50>; guia: <https://topepo.github.io/C5.0/>;
+> `randomForest` (boscos aleatoris) — <https://CRAN.R-project.org/package=randomForest>;
+> `caret` (matriu de confusió) — <https://CRAN.R-project.org/package=caret>.*
 
 ***
 
@@ -600,7 +1313,86 @@ mètodes basats en densitat (exercici 4).
 
 ### S'identifica quines possibles limitacions tenen les dades que heu seleccionat per obtenir conclusions amb els models (supervisat i no supervisat).
 
+**Limitacions comunes a tots els models.** El joc de dades prové de **VitalDB**, un
+registre d'un **únic centre** (Seoul National University Hospital). Això limita la
+**validesa externa**: els patrons trobats reflecteixen la pràctica clínica i la
+població d'aquell hospital i poden no generalitzar a altres sistemes sanitaris,
+poblacions o èpoques. A més, és una **fotografia transversal**: no hi ha seguiment
+temporal ni informació de causalitat, de manera que tots els models capturen
+**associacions, no relacions causa-efecte**. Hi ha també una proporció elevada de
+**valors absents** —les gasometries preoperatòries superen el 90 %, `intraop_ebl` i
+`intraop_uo` ronden el 40 %—, que ens va obligar a **descartar variables
+potencialment informatives** (llindar del 20 %).
+
+**Limitacions específiques dels models no supervisats (ex 1–4).** L'agrupament només
+podia emprar variables **quantitatives o binàries** i **casos complets** (5.249 de
+5.926), de manera que es va **perdre la informació categòrica** (tipus de cirurgia,
+departament…) que després va resultar clau en els models supervisats. L'estructura
+en 33 dimensions és més un **gradient** que no pas grups ben separats: ho reflecteixen
+la silueta baixa (0,37) i la escassa variància explicada (`betweenss/totss` ≈ 0,07).
+Per tant, la partició en dos grups és **útil però difusa**, i la mateixa
+dimensionalitat va fer **fracassar** els mètodes de densitat (exercici 4). Les
+etiquetes "alt risc/estàndard" són **construccions derivades de les dades**, no
+categories clíniques validades.
+
+**Limitacions específiques dels models supervisats (ex 5–7).** La variable objectiu
+està **desequilibrada** (18 % de positius), cosa que esbiaixa els models cap a la
+classe majoritària i fa enganyosa l'*accuracy*. Diverses variables predictores són
+**intraoperatòries**: encara que es coneixen abans de la decisió d'ingrés, la frontera
+amb una possible **fuita d'informació** és estreta i cal interpretar-les amb cautela.
+Finalment, el *random forest* va requerir **imputar** els absents (mediana/moda), una
+simplificació que introdueix supòsits propis.
+
 ### S'identifiquen possibles riscos de l'ús del model i se’n resumeixen les principals conclusions (mínim 300 paraules).
+
+**Riscos de l'ús dels models.** El primer risc és **confondre associació amb
+causalitat**: que la durada de la cirurgia o el tipus d'intervenció prediguin l'ingrés
+a l'UCI **no** vol dir que modificar-los eviti l'ingrés; usar el model per guiar
+decisions com si fos causal seria un error. El segon és la **manca de
+generalització**: un model entrenat en un sol hospital pot **degradar-se** notablement
+en una població diferent (*distribution shift*), i desplegar-lo sense revalidar seria
+arriscat. El tercer afecta especialment els **falsos negatius**: amb una sensibilitat
+de l'ordre de 0,55 (arbre podat), el model **deixa escapar gairebé la meitat** dels
+ingressos reals; en un context clínic, no anticipar un ingrés a l'UCI és greu, motiu
+pel qual vam proposar la variant **sensible al cost**. El quart és la
+**interpretabilitat**: el *random forest*, tot i ser el més precís, és una **caixa
+negra**; confiar-hi cegament fomenta l'**automation bias** (acceptar la predicció
+sense criteri) i dificulta retre comptes d'una decisió. Finalment, hi ha un risc
+d'**equitat**: si certs subgrups de pacients estan infrarepresentats, el model pot
+rendir pitjor per a ells sense que ho detectem.
+
+**Conclusions principals.** Aquest treball ha aplicat, sobre una cohort quirúrgica
+real, tot l'espectre de tècniques de mineria de dades, supervisades i no supervisades,
+amb resultats **coherents entre si i clínicament plausibles**. Pel costat **no
+supervisat**, *k-means* i *k-medians* coincideixen (concordança del 92 %) a separar
+dos perfils: un **pacient quirúrgic complex/fràgil** (≈ 13 %) i un **pacient
+estàndard** (≈ 87 %). La mètrica del cosinus va aportar una lectura complementària,
+reorganitzant la cohort per **comorbiditat crònica i edat** en lloc de severitat
+aguda, i els mètodes de densitat (DBSCAN/OPTICS) van confirmar indirectament
+l'estructura en reinterpretar els pacients d'alt risc, molt dispersos, com a
+***outliers*** —una conclusió internament consistent amb la major dispersió d'aquell
+grup ja observada a l'exercici 1—. Pel costat **supervisat**, l'ingrés a l'UCI és
+**predictible amb una qualitat moderada-bona**: el *random forest* assoleix una
+*accuracy* del 91 % i una *kappa* de 0,65, per damunt de l'arbre CART podat (87 %,
+*kappa* 0,53). El resultat més rellevant, però, no és cap xifra concreta sinó la
+**convergència**: els quatre models supervisats identifiquen **les mateixes variables
+determinants** —tipus, durada i agressivitat de la cirurgia, departament i fragilitat
+preoperatòria del pacient (albúmina, urea, edat)—, cosa que indica que el senyal
+predictiu és **robust i real**. Tot plegat dibuixa un compromís nítid entre
+**precisió i interpretabilitat**: l'arbre de decisió ofereix regles llegibles i
+auditables a costa d'una mica de precisió, mentre que els *ensembles* maximitzen
+l'encert a costa de la transparència. La tria final hauria de dependre de l'**objectiu
+d'ús** —suport explicable a peu de llit o alerta automàtica— i, en qualsevol cas,
+exigiria una **validació externa** abans de qualsevol aplicació real. Més enllà dels
+resultats concrets, el projecte il·lustra una lliçó metodològica de fons: **cap
+algorisme és intrínsecament "el millor"**. Cada mètode incorpora supòsits propis —la
+mètrica de distància en el cas no supervisat, el criteri de partició o el grau
+d'ensemblat en el supervisat— que determinen què és capaç de "veure" a les dades.
+Per això la **triangulació** de diverses tècniques, més que l'optimització d'una de
+sola, ha estat el que ha permès distingir el **senyal robust** (la influència del
+tipus i la durada de la cirurgia, i de la fragilitat del pacient) del **soroll
+metodològic**, i és la pràctica que recomanaríem mantenir en qualsevol anàlisi
+posterior d'aquesta mena de dades clíniques.
 
 ***
 
@@ -608,5 +1400,124 @@ mètodes basats en densitat (exercici 4).
 
 ### Realitzar almenys 3 consultes tenint en compte el que s’ha proposat al punt 9 de l’enunciat.
 
+Durant el desenvolupament de la pràctica he fet servir una eina d'IA generativa com a
+**suport tècnic i metodològic**, sempre verificant-ne les respostes amb la
+documentació oficial i amb proves sobre les meves pròpies dades. A continuació
+documento les consultes més rellevants, classificades en les cinc categories. El gros
+del suport s'ha concentrat en la **programació en R**, mentre que la **interpretació
+clínica** dels resultats l'he treballada de manera conjunta, aportant-hi el criteri
+propi.
+
+#### Consulta 1 — Programació
+
+1. **Pregunta.** *"Com puc implementar un k-medians «pur» a R, amb la mediana com a
+   centre i distància Manhattan? És el mateix que la funció `pam()`?"*
+2. **Resposta obtinguda.** L'IA va aclarir que `pam()` implementa *around medoids*
+   (el centre és un cas real, no la mediana) i va recomanar el paquet `flexclust`,
+   concretament `kcca(..., family = kccaFamily("kmedians"))`, per a un k-medians
+   amb centroides–mediana i mètrica L1.
+3. **Decisió.** Vaig adoptar `flexclust` com a mètode principal de l'exercici 2 i vaig
+   conservar `pam()` com a comparació opcional *around medoids*, tal com permet
+   l'enunciat.
+4. **Reflexió crítica.** La distinció medoide vs. mediana no em quedava clara i la
+   resposta la va fixar bé. Tot i així, no la vaig donar per bona sense més: vaig
+   comprovar empíricament que els dos mètodes donaven particions diferents (PAM
+   divergeix força) i que el k-medians concordava en un 92 % amb el k-means, cosa que
+   en va justificar la tria.
+
+#### Consulta 2 — Programació
+
+1. **Pregunta.** *"En entrenar un model C5.0 obtinc l'error `unable to translate 'Sí'
+   to a wide string`. Com el soluciono?"*
+2. **Resposta obtinguda.** L'IA va identificar que la implementació en C de `C50` no
+   gestiona bé els **nivells de factor amb accents** segons la configuració regional,
+   i va proposar dues vies: ajustar el *locale* o **recodificar els nivells a ASCII**.
+3. **Decisió.** Vaig crear una còpia del conjunt on el nivell `Sí` es reanomena a `Si`
+   **només per al model C5.0**, mantenint `Sí` a la resta del document.
+4. **Reflexió crítica.** Vaig descartar la via del *locale* després de comprovar que
+   `read.csv(encoding = "UTF-8")` no resolia el problema; la recodificació ASCII va ser
+   la solució robusta. Aprenentatge: alguns paquets antics basats en C no són
+   compatibles amb cadenes UTF-8, un detall fàcil de passar per alt treballant en
+   català.
+
+#### Consulta 3 — Programació
+
+1. **Pregunta.** *"El `randomForest` falla amb les meves dades, que tenen valors
+   absents. Com ho gestiono, si abans amb `rpart` no calia fer res?"*
+2. **Resposta obtinguda.** L'IA va explicar que, a diferència de `rpart` i `C5.0` —que
+   tracten els NA amb divisions substitutes—, `randomForest` **necessita dades
+   completes**, i va suggerir imputar amb `na.roughfix()` (mediana per a numèriques,
+   moda per a categòriques) o bé `rfImpute()`.
+3. **Decisió.** Vaig imputar amb `na.roughfix()` el conjunt d'entrenament i el de test
+   abans d'ajustar i predir amb el bosc.
+4. **Reflexió crítica.** Sóc conscient que imputar el test amb les seves pròpies
+   medianes és una simplificació amb un cert risc de fuita; per a aquesta pràctica és
+   acceptable, però en un entorn real caldria imputar el test amb els estadístics
+   apresos a l'entrenament. La consulta em va ajudar a entendre **per què** uns models
+   toleren els NA i altres no.
+
+#### Consulta 4 — Metodologia
+
+1. **Pregunta.** *"Per a un k-means amb variables clíniques de escales molt diferents,
+   he de normalitzar? I com decideixo el nombre de clústers?"*
+2. **Resposta obtinguda.** L'IA va recomanar **normalitzar (z-score)** per evitar que
+   les variables de magnitud gran (com el cristal·loide en mL) dominessin la distància
+   euclidiana, i triar *k* combinant el **mètode del colze** amb el **coeficient de
+   silueta**.
+3. **Decisió.** Vaig treballar amb les dades normalitzades (`Xs`) i vaig fixar **k = 2**
+   pel màxim clar de silueta.
+4. **Reflexió crítica.** La recomanació coincidia amb l'advertiment de l'enunciat, però
+   la vaig validar jo mateix: en comparar la silueta amb dades crues (artificialment
+   alta, 0,73) i normalitzades (0,37), vaig confirmar que la primera era enganyosa
+   perquè una sola variable dominava l'agrupament.
+
+#### Consulta 5 — Diagnosi
+
+1. **Pregunta.** *"El DBSCAN em retorna sempre un sol clúster i molt soroll, provi els
+   valors de `eps` i `minPts` que provi. És un error meu?"*
+2. **Resposta obtinguda.** L'IA va explicar que **no necessàriament és un error**: en
+   espais de molta dimensió (33 variables) la densitat es torna gairebé uniforme i
+   DBSCAN té dificultats per formar grups (*maledicció de la dimensionalitat*). Va
+   recomanar el `kNNdistplot` per orientar `eps` i interpretar el resultat com a
+   informació en si mateix.
+3. **Decisió.** Vaig mantenir el resultat, vaig fer un escombrat sistemàtic de
+   paràmetres i vaig interpretar el soroll com un conjunt d'*outliers*.
+4. **Reflexió crítica.** El que semblava un fracàs tècnic va resultar ser una troballa:
+   ho vaig confirmar creuant els punts de soroll amb el grup d'alt risc de l'exercici 1
+   (coincidien en gran part). Em va ensenyar a no descartar un resultat "lleig" sense
+   entendre'n la causa.
+
+#### Consulta 6 — Interpretació
+
+1. **Pregunta.** *"Amb un 18 % de positius, el meu arbre té un 87 % d'accuracy. És bo?
+   Quines mètriques he de mirar de debò?"*
+2. **Resposta obtinguda.** L'IA va advertir de la **paradoxa de l'exactitud** (predir
+   sempre «No» ja donaria un 82 %) i va recomanar fixar-se en la **kappa**, la
+   **sensibilitat** i l'**especificitat**, i considerar el **cost asimètric** dels
+   errors.
+3. **Decisió.** Vaig reportar la matriu de confusió amb totes les mètriques i vaig
+   prioritzar la *kappa* i el balanç sensibilitat/especificitat per damunt de
+   l'*accuracy*.
+4. **Reflexió crítica.** L'IA va proporcionar el **marc de mètriques**, però la lectura
+   clínica —que un fals negatiu (no anticipar un ingrés a l'UCI) és més greu que un
+   fals positiu— la vam desenvolupar de manera conjunta, i és la que va motivar el
+   refinament sensible al cost. Aquí l'aportació pròpia de criteri va ser decisiva.
+
+#### Consulta 7 — Extensió
+
+1. **Pregunta.** *"Més enllà de l'arbre bàsic, què podria fer per millorar la detecció
+   d'ingressos i enriquir la comparació de models?"*
+2. **Resposta obtinguda.** L'IA va proposar diverses línies: introduir una **matriu de
+   pèrdua** per penalitzar els falsos negatius, provar mètodes d'***ensemble***
+   (*boosting* amb C5.0, *random forest*) per guanyar precisió, i afegir una
+   **visualització PCA** per il·lustrar el resultat de DBSCAN.
+3. **Decisió.** Vaig incorporar les tres idees: l'arbre sensible al cost (exercici 6),
+   el C5.0 amb *boosting* i el *random forest* (exercici 7) i el gràfic PCA del soroll
+   (exercici 4).
+4. **Reflexió crítica.** Aquestes propostes van ampliar l'abast de la pràctica més
+   enllà del mínim demanat. Les vaig valorar de manera crítica: el *random forest*
+   millora la precisió però sacrifica la interpretabilitat, de manera que no el
+   presento com a "guanyador" absolut sinó dins del compromís precisió–transparència
+   que vertebra les conclusions.
 
 ***
